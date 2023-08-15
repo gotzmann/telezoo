@@ -5,9 +5,12 @@ import (
     "os"
     "time"
     "fmt"
+    "net/http"
+    "bytes"
 
     tele "gopkg.in/telebot.v3"
     "github.com/joho/godotenv"
+    resty "github.com/go-resty/resty/v2"
 )
 
 func main () {
@@ -47,6 +50,35 @@ func main () {
             return err
         }
         //msg = nil
+
+        //res, err := http.Get(requestURL)
+	      //if err != nil {
+		    //    fmt.Printf("error making http request: %s\n", err)
+		    //    os.Exit(1)
+	      //}
+
+        jsonBody := []byte(`{"id": "655ba2e7-ec5f-4a79-b131-f5e855463c88", "prompt": "Hello, Mira"}`)
+        bodyReader := bytes.NewReader(jsonBody)
+
+        requestURL := os.Getenv("FAST") + "/jobs"
+        req, err := http.NewRequest(http.MethodPost, requestURL, bodyReader)
+        if err != nil {
+		        fmt.Printf("client: could not create request: %s\n", err)
+		        os.Exit(1)
+        }
+        req.Header.Set("Content-Type", "application/json")
+
+        client := http.Client{
+            Timeout: 30 * time.Second,
+        }
+
+        res, err := client.Do(req)
+        if err != nil {
+	          fmt.Printf("client: error making http request: %s\n", err)
+	          os.Exit(1)
+        }
+
+        fmt.Printf("%+v", res)
 
         // Instead, prefer a context short-hand:
         id := fmt.Sprintf("%d", user.ID)
