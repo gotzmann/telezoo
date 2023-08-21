@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -12,6 +14,13 @@ import (
 	"github.com/joho/godotenv"
 	tele "gopkg.in/telebot.v3"
 )
+
+type Job struct {
+	ID     string `json: "id"`
+	Prompt string `json: "prompt"`
+	Output string `json: "output"`
+	Status string `json: "status"`
+}
 
 type User struct {
 	ID        string // User ID within external system
@@ -77,10 +86,10 @@ func main() {
 		)
 		// Use full-fledged bot's functions
 		// only if you need a result:
-		_, err := b.Send(tgUser, prompt)
-		if err != nil {
-			return err
-		}
+		//_, err := b.Send(tgUser, prompt)
+		//if err != nil {
+		//	return err
+		//}
 		//msg = nil
 
 		//tgID tgUser.ID
@@ -88,13 +97,14 @@ func main() {
 		var user User
 		var ok bool
 		if user, ok = users[tgUser.ID]; !ok {
-			users[tgUser.ID] = User{
+			user = User{
 				ID:        "",
 				TGID:      tgUser.ID,
 				Mode:      "chat",
 				SessionID: uuid.New().String(),
 				Status:    "",
 			}
+			users[tgUser.ID] = user
 		}
 
 		//res, err := http.Get(requestURL)
@@ -103,13 +113,18 @@ func main() {
 		//    os.Exit(1)
 		//}
 
-		jsonBody := []byte(`{"id": "` + user.SessionID + `", "prompt": "` + prompt + `"}`)
-		bodyReader := bytes.NewReader(jsonBody)
+		body := "{\"id\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\"}"
+		bodyReader := bytes.NewReader([]byte(body))
 
-		requestURL := os.Getenv("FAST") + "/jobs"
-		req, err := http.NewRequest(http.MethodPost, requestURL, bodyReader)
+		fmt.Printf("\n\n%+v", body)
+
+		//jsonBody := []byte(`{"id": "` + user.SessionID + `", "prompt": "` + prompt + `"}`)
+		//bodyReader := bytes.NewReader(jsonBody)
+
+		url := os.Getenv("FAST") + "/jobs"
+		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
 		if err != nil {
-			fmt.Printf("client: could not create request: %s\n", err)
+			fmt.Printf("\n[ERR] HTTP POST: could not create request: %s\n", err)
 			os.Exit(1)
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -120,17 +135,63 @@ func main() {
 
 		res, err := client.Do(req)
 		if err != nil {
-			fmt.Printf("client: error making http request: %s\n", err)
+			fmt.Printf("\n[ERR] HTTP: error making http request: %s\n", err)
 			os.Exit(1)
 		}
+		defer res.Body.Close()
 
-		fmt.Printf("%+v", res)
+		fmt.Printf("\n\n%+v", res)
+		fmt.Printf("\n\n%+v", res.Body)
+
+		//output, err := io.ReadAll(res.Body)
+		// b, err := ioutil.ReadAll(resp.Body)  Go.1.15 and earlier
+		//if err != nil {
+		//	log.Fatalln(err)
+		//}
 
 		// Instead, prefer a context short-hand:
 		//id := fmt.Sprintf("%d", user.TGID)
 		//return c.Send("LANG: " + user.LanguageCode + " USER: " + id + " | " + user.Username + " TEXT: " + text)
 
-		return c.Send("OK")
+		url = os.Getenv("FAST") + "/jobs/" + user.SessionID
+		fmt.Printf("\n ===> %s", url)
+
+		req, err = http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			fmt.Printf("\n[ERR] HTTP: could not create request: %s\n", err)
+			os.Exit(1)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		var job Job
+		for job.Status != "finished" {
+			// TODO: Better and robust handling with error checking and deadlines
+
+			//client := http.Client{
+			//    Timeout: 30 * time.Second,
+			//}
+
+			// TODO: Error Handling
+			res, err := client.Do(req)
+			if err != nil {
+				fmt.Printf("\n[ERR] HTTP GET: could not create request: %s\n", err)
+				os.Exit(1)
+			}
+
+			output, err := io.ReadAll(res.Body)
+
+			fmt.Printf("\n=> %+v", string(output))
+
+			json.Unmarshal(output, &job)
+
+			fmt.Printf("\n=> %+v", job)
+
+			//body := "{\"id\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\"}"
+			//bodyReader := bytes.NewReader([]byte(body))
+
+		}
+
+		return c.Send(string(job.Output))
 	})
 
 	b.Handle(tele.OnQuery, func(c tele.Context) error {
