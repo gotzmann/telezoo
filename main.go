@@ -80,10 +80,13 @@ func main() {
 		// All the text messages that weren't
 		// captured by existing handlers.
 
-		var (
-			tgUser = c.Sender()
-			prompt = c.Text()
-		)
+		//var (
+		tgUser := c.Sender()
+		prompt := c.Text()
+		//)
+
+		fmt.Printf("\n\nPROMPT: %+v", prompt)
+
 		// Use full-fledged bot's functions
 		// only if you need a result:
 		//_, err := b.Send(tgUser, prompt)
@@ -113,7 +116,9 @@ func main() {
 		//    os.Exit(1)
 		//}
 
-		body := "{\"id\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\"}"
+		id := uuid.New().String()
+
+		body := "{\"id\": \"" + id + "\", \"session\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\"}"
 		bodyReader := bytes.NewReader([]byte(body))
 
 		fmt.Printf("\n\n%+v", body)
@@ -140,8 +145,8 @@ func main() {
 		}
 		defer res.Body.Close()
 
-		fmt.Printf("\n\n%+v", res)
-		fmt.Printf("\n\n%+v", res.Body)
+		//fmt.Printf("\n\n%+v", res)
+		//fmt.Printf("\n\n%+v", res.Body)
 
 		//output, err := io.ReadAll(res.Body)
 		// b, err := ioutil.ReadAll(resp.Body)  Go.1.15 and earlier
@@ -153,7 +158,7 @@ func main() {
 		//id := fmt.Sprintf("%d", user.TGID)
 		//return c.Send("LANG: " + user.LanguageCode + " USER: " + id + " | " + user.Username + " TEXT: " + text)
 
-		url = os.Getenv("FAST") + "/jobs/" + user.SessionID
+		url = os.Getenv("FAST") + "/jobs/" + id
 		fmt.Printf("\n ===> %s", url)
 
 		req, err = http.NewRequest(http.MethodGet, url, nil)
@@ -182,12 +187,14 @@ func main() {
 
 			fmt.Printf("\n=> %+v", string(output))
 
-			json.Unmarshal(output, &job)
+			json.Unmarshal(output, &job) // TODO: Error Handling
 
-			fmt.Printf("\n=> %+v", job)
+			//fmt.Printf("\n=> %+v", job)
 
 			//body := "{\"id\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\"}"
 			//bodyReader := bytes.NewReader([]byte(body))
+
+			time.Sleep(1 * time.Second)
 
 		}
 
