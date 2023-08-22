@@ -15,6 +15,12 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
+// TODO Balancer between instances
+// TODO Sticky sessions within instances
+// PRO / Chat selector
+// TODO Session reset?
+// TODO Do not send next requests while the first one is not processed? Or allow parallel inference of different messages?
+
 type Job struct {
 	ID     string `json: "id"`
 	Prompt string `json: "prompt"`
@@ -50,7 +56,7 @@ func init() {
 
 func main() {
 
-	fmt.Printf("\nTeleZoo v 0.0 is starting...")
+	fmt.Printf("\nTeleZoo v0.2 is starting...")
 
 	err := godotenv.Load()
 	if err != nil {
@@ -83,11 +89,12 @@ func main() {
 		tgUser := c.Sender()
 		prompt := c.Text()
 
-		fmt.Printf("\n\nPROMPT: %+v", prompt)
+		//fmt.Printf("\n\nPROMPT: %+v", prompt)
 
 		var user User
 		var ok bool
 		if user, ok = users[tgUser.ID]; !ok {
+			fmt.Printf("\n\nNEW USER: %d", tgUser.ID)
 			user = User{
 				ID:        "",
 				TGID:      tgUser.ID,
@@ -106,10 +113,10 @@ func main() {
 
 		id := uuid.New().String()
 
-		body := "{\"id\": \"" + id + "\", \"session\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\"}"
+		body := "{ \"id\": \"" + id + "\", \"session\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\" }"
 		bodyReader := bytes.NewReader([]byte(body))
 
-		fmt.Printf("\n\n%+v", body)
+		fmt.Printf("\n\nREQ: %s", body)
 
 		//jsonBody := []byte(`{"id": "` + user.SessionID + `", "prompt": "` + prompt + `"}`)
 		//bodyReader := bytes.NewReader(jsonBody)
@@ -174,7 +181,7 @@ func main() {
 
 			output, err := io.ReadAll(res.Body)
 
-			fmt.Printf("\n=> %+v", string(output))
+			//fmt.Printf("\n=> %+v", string(output))
 
 			json.Unmarshal(output, &job) // TODO: Error Handling
 
@@ -194,6 +201,8 @@ func main() {
 		}
 
 		//return c.Send(string(job.Output))
+
+		fmt.Printf("\n\nFINISHED")
 
 		return nil
 	})
