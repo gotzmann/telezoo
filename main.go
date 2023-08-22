@@ -62,40 +62,28 @@ func main() {
 		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
 	}
 
-	b, err := tele.NewBot(pref)
+	bot, err := tele.NewBot(pref)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
 
-	b.Handle("/pro", func(c tele.Context) error {
+	bot.Handle("/pro", func(c tele.Context) error {
 		return c.Send("Switched to PRO mode...")
 	})
 
-	b.Handle("/chat", func(c tele.Context) error {
+	bot.Handle("/chat", func(c tele.Context) error {
 		return c.Send("Switched to CHAT mode...")
 	})
 
-	b.Handle(tele.OnText, func(c tele.Context) error {
-		// All the text messages that weren't
-		// captured by existing handlers.
+	// -- All the text messages that weren't captured by existing handlers
 
-		//var (
+	bot.Handle(tele.OnText, func(c tele.Context) error {
+
 		tgUser := c.Sender()
 		prompt := c.Text()
-		//)
 
 		fmt.Printf("\n\nPROMPT: %+v", prompt)
-
-		// Use full-fledged bot's functions
-		// only if you need a result:
-		//_, err := b.Send(tgUser, prompt)
-		//if err != nil {
-		//	return err
-		//}
-		//msg = nil
-
-		//tgID tgUser.ID
 
 		var user User
 		var ok bool
@@ -130,18 +118,18 @@ func main() {
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
 		if err != nil {
 			fmt.Printf("\n[ERR] HTTP POST: could not create request: %s\n", err)
-			os.Exit(1)
+			os.Exit(1) // FIXME
 		}
 		req.Header.Set("Content-Type", "application/json")
 
 		client := http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 3 * time.Second,
 		}
 
 		res, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("\n[ERR] HTTP: error making http request: %s\n", err)
-			os.Exit(1)
+			os.Exit(1) // FIXME
 		}
 		defer res.Body.Close()
 
@@ -159,16 +147,17 @@ func main() {
 		//return c.Send("LANG: " + user.LanguageCode + " USER: " + id + " | " + user.Username + " TEXT: " + text)
 
 		url = os.Getenv("FAST") + "/jobs/" + id
-		fmt.Printf("\n ===> %s", url)
+		//fmt.Printf("\n ===> %s", url)
 
 		req, err = http.NewRequest(http.MethodGet, url, nil)
 		if err != nil {
 			fmt.Printf("\n[ERR] HTTP: could not create request: %s\n", err)
-			os.Exit(1)
+			os.Exit(1) // FIXME
 		}
 		req.Header.Set("Content-Type", "application/json")
 
 		var job Job
+		var msg *tele.Message
 		for job.Status != "finished" {
 			// TODO: Better and robust handling with error checking and deadlines
 
@@ -180,7 +169,7 @@ func main() {
 			res, err := client.Do(req)
 			if err != nil {
 				fmt.Printf("\n[ERR] HTTP GET: could not create request: %s\n", err)
-				os.Exit(1)
+				os.Exit(1) // FIXME
 			}
 
 			output, err := io.ReadAll(res.Body)
@@ -189,19 +178,27 @@ func main() {
 
 			json.Unmarshal(output, &job) // TODO: Error Handling
 
+			if msg == nil {
+				msg, _ = bot.Send(tgUser /*string(output)*/, job.Output)
+			} else {
+				bot.Edit(msg, job.Output)
+			}
+
 			//fmt.Printf("\n=> %+v", job)
 
 			//body := "{\"id\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\"}"
 			//bodyReader := bytes.NewReader([]byte(body))
 
-			time.Sleep(1 * time.Second)
+			time.Sleep(200 * time.Millisecond)
 
 		}
 
-		return c.Send(string(job.Output))
+		//return c.Send(string(job.Output))
+
+		return nil
 	})
 
-	b.Handle(tele.OnQuery, func(c tele.Context) error {
+	bot.Handle(tele.OnQuery, func(c tele.Context) error {
 		//var (
 		//	user = c.Sender()
 		//	text = c.Text()
@@ -221,5 +218,5 @@ func main() {
 	})
 
 	fmt.Printf("\nListen for Telegram...")
-	b.Start()
+	bot.Start()
 }
