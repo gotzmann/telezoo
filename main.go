@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,11 +16,13 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-// TODO Balancer between instances
-// TODO Sticky sessions within instances
-// PRO / Chat selector
-// TODO Session reset?
-// TODO Do not send next requests while the first one is not processed? Or allow parallel inference of different messages?
+// [ ] TODO: Balancer between instances
+// [ ] TODO: Sticky sessions within instances
+// [ ] TODO: PRO / Chat selector
+// [ ] TODO: Session reset?
+// [+] DONE: Do not send next requests while the first one is not processed? Or allow parallel inference of different messages?
+
+var mu sync.Mutex // Global mutex TODO: Implement better solutions
 
 type Job struct {
 	ID     string `json: "id"`
@@ -42,15 +45,16 @@ type Session struct {
 	SessionID string // Unique UUID v4
 	Prompts   []string
 	Outputs   []string
+	Status    string
 }
 
 var (
-	users    map[int64]User
+	users    map[int64]*User
 	sessions map[string]string
 )
 
 func init() {
-	users = make(map[int64]User)
+	users = make(map[int64]*User)
 	sessions = make(map[string]string)
 }
 
@@ -89,13 +93,16 @@ func main() {
 		tgUser := c.Sender()
 		prompt := c.Text()
 
-		//fmt.Printf("\n\nPROMPT: %+v", prompt)
+		fmt.Printf("\n\nNEW REQ: %+v", prompt)
 
-		var user User
+		var user *User
 		var ok bool
+
+		// -- new user ?
+		mu.Lock()
 		if user, ok = users[tgUser.ID]; !ok {
-			fmt.Printf("\n\nNEW USER: %d", tgUser.ID)
-			user = User{
+			fmt.Printf("\n\nNEW USER: %d", tgUser.ID) // DEBUG
+			user = &User{
 				ID:        "",
 				TGID:      tgUser.ID,
 				Mode:      "chat",
@@ -103,6 +110,26 @@ func main() {
 				Status:    "",
 			}
 			users[tgUser.ID] = user
+		}
+		mu.Unlock()
+
+		// -- catch processing GPU slot for the current request, or wait while it will be available
+		//    this allows to process multiple DDoS requests from the same users one by one
+		//    TODO: wathcdog / deadline to break deadlocks
+
+		breakLoop := false
+		for {
+			mu.Lock()
+			if user.Status != "processing" {
+				user.Status = "processing"
+				breakLoop = true
+			}
+			mu.Unlock()
+			if breakLoop {
+				break
+			}
+			//fmt.Printf(" [ WAIT-FOR-GPU-SLOT ] ") // DEBUG
+			time.Sleep(200 * time.Millisecond)
 		}
 
 		//res, err := http.Get(requestURL)
@@ -196,6 +223,7 @@ func main() {
 			//body := "{\"id\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\"}"
 			//bodyReader := bytes.NewReader([]byte(body))
 
+			//fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
 			time.Sleep(200 * time.Millisecond)
 
 		}
@@ -203,6 +231,10 @@ func main() {
 		//return c.Send(string(job.Output))
 
 		fmt.Printf("\n\nFINISHED")
+
+		mu.Lock()
+		user.Status = "" // TODO: Enum all statuses and flow between them
+		mu.Unlock()
 
 		return nil
 	})
