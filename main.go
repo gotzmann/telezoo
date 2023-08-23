@@ -16,6 +16,8 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
+// [ ] TODO: Handle SIGINT and do graceful shutdown
+// [ ] TODO: Do not os.Exit() or log.Fatal or panic!
 // [ ] TODO: Balancer between instances
 // [ ] TODO: Sticky sessions within instances
 // [ ] TODO: PRO / Chat selector
@@ -60,7 +62,7 @@ func init() {
 
 func main() {
 
-	fmt.Printf("\nTeleZoo v0.2 is starting...")
+	fmt.Printf("\nTeleZoo v0.3 is starting...")
 
 	err := godotenv.Load()
 	if err != nil {
@@ -78,15 +80,19 @@ func main() {
 		return
 	}
 
+	// -- Switch into the PRO mode
+
 	bot.Handle("/pro", func(c tele.Context) error {
-		return c.Send("Switched to PRO mode...")
+		return c.Send("Switching to PRO mode...")
 	})
+
+	// -- Switch into the CHAT mode
 
 	bot.Handle("/chat", func(c tele.Context) error {
-		return c.Send("Switched to CHAT mode...")
+		return c.Send("Switching to CHAT mode...")
 	})
 
-	// -- All the text messages that weren't captured by existing handlers
+	// -- Handle user messages [ that weren't captured by other handlers ]
 
 	bot.Handle(tele.OnText, func(c tele.Context) error {
 
@@ -99,6 +105,7 @@ func main() {
 		var ok bool
 
 		// -- new user ?
+
 		mu.Lock()
 		if user, ok = users[tgUser.ID]; !ok {
 			fmt.Printf("\n\nNEW USER: %d", tgUser.ID) // DEBUG
@@ -132,21 +139,12 @@ func main() {
 			time.Sleep(200 * time.Millisecond)
 		}
 
-		//res, err := http.Get(requestURL)
-		//if err != nil {
-		//    fmt.Printf("error making http request: %s\n", err)
-		//    os.Exit(1)
-		//}
-
 		id := uuid.New().String()
 
 		body := "{ \"id\": \"" + id + "\", \"session\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\" }"
 		bodyReader := bytes.NewReader([]byte(body))
 
 		fmt.Printf("\n\nREQ: %s", body)
-
-		//jsonBody := []byte(`{"id": "` + user.SessionID + `", "prompt": "` + prompt + `"}`)
-		//bodyReader := bytes.NewReader(jsonBody)
 
 		url := os.Getenv("FAST") + "/jobs"
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
@@ -169,16 +167,6 @@ func main() {
 
 		//fmt.Printf("\n\n%+v", res)
 		//fmt.Printf("\n\n%+v", res.Body)
-
-		//output, err := io.ReadAll(res.Body)
-		// b, err := ioutil.ReadAll(resp.Body)  Go.1.15 and earlier
-		//if err != nil {
-		//	log.Fatalln(err)
-		//}
-
-		// Instead, prefer a context short-hand:
-		//id := fmt.Sprintf("%d", user.TGID)
-		//return c.Send("LANG: " + user.LanguageCode + " USER: " + id + " | " + user.Username + " TEXT: " + text)
 
 		url = os.Getenv("FAST") + "/jobs/" + id
 		//fmt.Printf("\n ===> %s", url)
@@ -238,25 +226,22 @@ func main() {
 
 		return nil
 	})
+	/*
+		bot.Handle(tele.OnQuery, func(c tele.Context) error {
 
-	bot.Handle(tele.OnQuery, func(c tele.Context) error {
-		//var (
-		//	user = c.Sender()
-		//	text = c.Text()
-		//)
-
-		results := make(tele.Results, 1, 1) // []tele.Result
-		result := &tele.PhotoResult{
-			URL:      "https://image.jpg",
-			ThumbURL: "https://thumb.jpg", // required for photos
-		}
-		results[0] = result
-		// Incoming inline queries.
-		return c.Answer(
-			&tele.QueryResponse{
-				Results: results,
-			})
-	})
+			results := make(tele.Results, 1, 1) // []tele.Result
+			result := &tele.PhotoResult{
+				URL:      "https://image.jpg",
+				ThumbURL: "https://thumb.jpg", // required for photos
+			}
+			results[0] = result
+			// Incoming inline queries.
+			return c.Answer(
+				&tele.QueryResponse{
+					Results: results,
+				})
+		})
+	*/
 
 	fmt.Printf("\nListen for Telegram...")
 	bot.Start()
