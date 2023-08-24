@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	//"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
+// [ ] TODO: Start dialog with short instructions on how to use chat commands
 // [ ] TODO: Handle SIGINT and do graceful shutdown
 // [ ] TODO: Do not os.Exit() or log.Fatal or panic!
 // [ ] TODO: Balancer between instances
@@ -24,7 +28,13 @@ import (
 // [ ] TODO: Session reset?
 // [+] DONE: Do not send next requests while the first one is not processed? Or allow parallel inference of different messages?
 
-var mu sync.Mutex // Global mutex TODO: Implement better solutions
+var (
+	mu sync.Mutex // Global mutex TODO: Implement better solutions
+
+	chatZoo []string
+	proZoo  []string
+	zoo     map[string][]string
+)
 
 type Job struct {
 	ID     string `json: "id"`
@@ -39,6 +49,7 @@ type User struct {
 	Mode      string // pro / chat
 	SessionID string // current session
 	Status    string
+	Server    string // Server address for sticky sessions
 }
 
 type Session struct {
@@ -48,6 +59,7 @@ type Session struct {
 	Prompts   []string
 	Outputs   []string
 	Status    string
+	Server    string // Server address for sticky sessions
 }
 
 var (
@@ -58,39 +70,37 @@ var (
 func init() {
 	users = make(map[int64]*User)
 	sessions = make(map[string]string)
+	zoo = make(map[string][]string)
 }
 
 func main() {
 
 	fmt.Printf("\nTeleZoo v0.3 is starting...")
 
+	// -- Read settings and init all
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
+	chatZoo = strings.Split(os.Getenv("CHATZOO"), ",")
+	proZoo = strings.Split(os.Getenv("PROZOO"), ",")
+	zoo["chat"] = chatZoo
+	zoo["pro"] = chatZoo
 
 	pref := tele.Settings{
 		Token:  os.Getenv("TELEGRAM_TOKEN"),
 		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
 	}
 
+	// -- Set up bot
+
 	bot, err := tele.NewBot(pref)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
-
-	// -- Switch into the PRO mode
-
-	bot.Handle("/pro", func(c tele.Context) error {
-		return c.Send("Switching to PRO mode...")
-	})
-
-	// -- Switch into the CHAT mode
-
-	bot.Handle("/chat", func(c tele.Context) error {
-		return c.Send("Switching to CHAT mode...")
-	})
 
 	// -- Handle user messages [ that weren't captured by other handlers ]
 
@@ -113,6 +123,7 @@ func main() {
 				ID:        "",
 				TGID:      tgUser.ID,
 				Mode:      "chat",
+				Server:    zoo["chat"][rand.Intn(len(chatZoo))],
 				SessionID: uuid.New().String(),
 				Status:    "",
 			}
@@ -146,7 +157,7 @@ func main() {
 
 		fmt.Printf("\n\nREQ: %s", body)
 
-		url := os.Getenv("FAST") + "/jobs"
+		url := /*os.Getenv("FAST")*/ user.Server + "/jobs"
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
 		if err != nil {
 			fmt.Printf("\n[ERR] HTTP POST: could not create request: %s\n", err)
@@ -168,7 +179,7 @@ func main() {
 		//fmt.Printf("\n\n%+v", res)
 		//fmt.Printf("\n\n%+v", res.Body)
 
-		url = os.Getenv("FAST") + "/jobs/" + id
+		url = /*os.Getenv("FAST")*/ user.Server + "/jobs/" + id
 		//fmt.Printf("\n ===> %s", url)
 
 		req, err = http.NewRequest(http.MethodGet, url, nil)
@@ -242,6 +253,35 @@ func main() {
 				})
 		})
 	*/
+
+	// -- Start new session
+
+	bot.Handle("/new", func(c tele.Context) error {
+		tgUser := c.Sender()
+
+		mu.Lock()
+		if user, ok := users[tgUser.ID]; ok {
+			fmt.Printf("\n\nNEW SESSION") // DEBUG
+			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo))]
+			user.SessionID = uuid.New().String()
+		}
+		// FIXME: What if there no such user? After server restart, etc
+		mu.Unlock()
+
+		return c.Send("Starting new chat session...")
+	})
+
+	// -- Switch into the PRO mode
+
+	bot.Handle("/pro", func(c tele.Context) error {
+		return c.Send("Switching to PRO mode...")
+	})
+
+	// -- Switch into the CHAT mode
+
+	bot.Handle("/chat", func(c tele.Context) error {
+		return c.Send("Switching to CHAT mode...")
+	})
 
 	fmt.Printf("\nListen for Telegram...")
 	bot.Start()
