@@ -22,11 +22,11 @@ import (
 // [ ] TODO: Start dialog with short instructions on how to use chat commands
 // [ ] TODO: Handle SIGINT and do graceful shutdown
 // [ ] TODO: Do not os.Exit() or log.Fatal or panic!
-// [ ] TODO: Balancer between instances
-// [ ] TODO: Sticky sessions within instances
-// [ ] TODO: PRO / Chat selector
-// [ ] TODO: Session reset?
-// [+] DONE: Do not send next requests while the first one is not processed? Or allow parallel inference of different messages?
+// [*] TODO: Balancer between instances
+// [*] TODO: Sticky sessions within instances
+// [*] TODO: PRO / Chat selector
+// [*] TODO: Session reset?
+// [*] DONE: Do not send next requests while the first one is not processed? Or allow parallel inference of different messages?
 
 var (
 	mu sync.Mutex // Global mutex TODO: Implement better solutions
@@ -75,7 +75,7 @@ func init() {
 
 func main() {
 
-	fmt.Printf("\nTeleZoo v0.3 is starting...")
+	fmt.Printf("\nTeleZoo v0.4 is starting...")
 
 	// -- Read settings and init all
 
@@ -274,12 +274,34 @@ func main() {
 	// -- Switch into the PRO mode
 
 	bot.Handle("/pro", func(c tele.Context) error {
+		tgUser := c.Sender()
+
+		mu.Lock()
+		if user, ok := users[tgUser.ID]; ok {
+			user.Mode = "pro"
+			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo))]
+			user.SessionID = uuid.New().String()
+		}
+		// FIXME: What if there no such user? After server restart, etc
+		mu.Unlock()
+
 		return c.Send("Switching to PRO mode...")
 	})
 
 	// -- Switch into the CHAT mode
 
 	bot.Handle("/chat", func(c tele.Context) error {
+		tgUser := c.Sender()
+
+		mu.Lock()
+		if user, ok := users[tgUser.ID]; ok {
+			user.Mode = "chat"
+			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo))]
+			user.SessionID = uuid.New().String()
+		}
+		// FIXME: What if there no such user? After server restart, etc
+		mu.Unlock()
+
 		return c.Send("Switching to CHAT mode...")
 	})
 
