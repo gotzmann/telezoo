@@ -22,6 +22,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
+// [ ] TODO: Send an empty message (rotated icon???) even before trying to call GPU?
 // [ ] TODO: Catching picture into Hello Message
 // [ ] TODO: Find great 13B LLaMA v2 based model for CHAT mode
 // [ ] TODO: Proper logging
