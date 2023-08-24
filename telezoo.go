@@ -22,10 +22,14 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
+// [ ] TODO: Catching picture into Hello Message
+// [ ] TODO: Find great 13B LLaMA v2 based model for CHAT mode
 // [ ] TODO: Proper logging
 // [ ] TODO: Start dialog with short instructions on how to use chat commands
-// [ ] TODO: Handle SIGINT and do graceful shutdown
-// [ ] TODO: Do not os.Exit() or log.Fatal or panic!
+// [*] TODO: Handle SIGINT
+// [ ] TODO: Do graceful shutdown
+// [ ] TODO: Proper deadlines and retries for HTTP calls
+// [*] TODO: Do not os.Exit() or log.Fatal or panic!
 // [*] TODO: Balancer between instances
 // [*] TODO: Sticky sessions within instances
 // [*] TODO: PRO / Chat selector
@@ -69,6 +73,13 @@ type Session struct {
 var (
 	users    map[int64]*User
 	sessions map[string]string
+
+	helloMessage = "Привет! Это ваш первый чат с Мирой, поэтому рекомендуем познакомиться с его возможностями.\n\n" +
+		"Мира умеет общаться на разных языках, но лучше всего понимает русский и английский.\n" +
+		"Она также понимает несколько команд:\n\n" +
+		"/new - начать новый диалог (забыть прошлые)\n" +
+		"/chat - переключиться в режим чата на любые темы (быстрая работа)\n" +
+		"/pro - включить максимальный интеллект модели (медленно и вдумчиво)"
 )
 
 func init() {
@@ -79,7 +90,7 @@ func init() {
 
 func main() {
 
-	fmt.Printf("\nTeleZoo v0.5 is starting...")
+	fmt.Printf("\nTeleZoo v0.6 is starting...")
 
 	// -- Read settings and init all
 
@@ -181,6 +192,8 @@ func main() {
 				Status:    "",
 			}
 			users[tgUser.ID] = user
+			// send hello message with instructions
+			bot.Send(tgUser, helloMessage)
 		}
 		mu.Unlock()
 
@@ -214,7 +227,8 @@ func main() {
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
 		if err != nil {
 			fmt.Printf("\n[ERR] HTTP POST: could not create request: %s\n", err)
-			os.Exit(1) // FIXME
+			//os.Exit(1) // FIXME
+			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		req.Header.Set("Content-Type", "application/json")
 
@@ -225,7 +239,8 @@ func main() {
 		res, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("\n[ERR] HTTP: error making http request: %s\n", err)
-			os.Exit(1) // FIXME
+			//os.Exit(1) // FIXME
+			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		defer res.Body.Close()
 
@@ -238,7 +253,8 @@ func main() {
 		req, err = http.NewRequest(http.MethodGet, url, nil)
 		if err != nil {
 			fmt.Printf("\n[ERR] HTTP: could not create request: %s\n", err)
-			os.Exit(1) // FIXME
+			//os.Exit(1) // FIXME
+			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		req.Header.Set("Content-Type", "application/json")
 
@@ -255,7 +271,8 @@ func main() {
 			res, err := client.Do(req)
 			if err != nil {
 				fmt.Printf("\n[ERR] HTTP GET: could not create request: %s\n", err)
-				os.Exit(1) // FIXME
+				//os.Exit(1) // FIXME
+				return c.Send("Проблемы со связью, попробуйте еще раз...")
 			}
 
 			output, err := io.ReadAll(res.Body)
