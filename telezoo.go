@@ -25,8 +25,9 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.8.0"
+const VERSION = "0.9.0"
 
+// [ ] TODO: daemond
 // [*] TODO: Save user IDs into disk storage, SQLite vs json.Marshal?
 // [ ] TODO: Send an empty message (rotated icon???) even before trying to call GPU?
 // [ ] TODO: Catching picture into Hello Message
