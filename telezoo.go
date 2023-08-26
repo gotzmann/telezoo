@@ -27,6 +27,7 @@ import (
 
 const VERSION = "0.11.0"
 
+// [ ] FIXME: Inspect on start - are there another instance is running?
 // [ ] TODO: daemond
 // [*] TODO: Save user IDs into disk storage, SQLite vs json.Marshal?
 // [ ] TODO: Send an empty message (rotated icon???) even before trying to call GPU?
