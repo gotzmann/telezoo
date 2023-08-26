@@ -24,6 +24,8 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
+const VERSION = "0.8.0"
+
 // [ ] TODO: Save user IDs into disk storage, SQLite?
 // [ ] TODO: Send an empty message (rotated icon???) even before trying to call GPU?
 // [ ] TODO: Catching picture into Hello Message
@@ -122,8 +124,8 @@ func main() {
 	logger := zap.New(core)
 	log := logger.Sugar()
 
-	fmt.Print("\nTeleZoo v0.7 is starting...")
-	log.Info("TeleZoo v0.7 is starting...")
+	fmt.Print("\nTeleZoo v" + VERSION + " is starting...")
+	log.Info("TeleZoo v" + VERSION + " is starting...")
 
 	// -- Init GPU pods
 
@@ -200,7 +202,8 @@ func main() {
 		tgUser := c.Sender()
 		prompt := c.Text()
 
-		fmt.Printf("\n\nNEW REQ: %+v", prompt)
+		//fmt.Printf("\n\nNEW REQ: %+v", prompt)
+		log.Infof("[MSG] New message", "user", tgUser.ID, "prompt", prompt)
 
 		var user *User
 		var ok bool
@@ -209,7 +212,8 @@ func main() {
 
 		mu.Lock()
 		if user, ok = users[tgUser.ID]; !ok {
-			fmt.Printf("\n\nNEW USER: %d", tgUser.ID) // DEBUG
+			//fmt.Printf("\n\nNEW USER: %d", tgUser.ID) // DEBUG
+			log.Infof("[USER] New user", "tgID", tgUser.ID)
 			user = &User{
 				ID:        "",
 				TGID:      tgUser.ID,
@@ -248,7 +252,7 @@ func main() {
 		body := "{ \"id\": \"" + id + "\", \"session\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\" }"
 		bodyReader := bytes.NewReader([]byte(body))
 
-		fmt.Printf("\n\nREQ: %s", body)
+		//fmt.Printf("\n\nREQ: %s", body)
 
 		url := /*os.Getenv("FAST")*/ user.Server + "/jobs"
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
@@ -260,13 +264,13 @@ func main() {
 		req.Header.Set("Content-Type", "application/json")
 
 		client := http.Client{
-			Timeout: 3 * time.Second,
+			Timeout: 5 * time.Second,
 		}
 
 		res, err := client.Do(req)
 		if err != nil {
-			fmt.Printf("\n[ERR] HTTP: error making http request: %s\n", err)
-			//os.Exit(1) // FIXME
+			//fmt.Printf("\n[ERR] HTTP: error making http request: %s\n", err)
+			log.Errorf("[ERR] Problem with HTTP request", "msg", err)
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		defer res.Body.Close()
@@ -279,8 +283,8 @@ func main() {
 
 		req, err = http.NewRequest(http.MethodGet, url, nil)
 		if err != nil {
-			fmt.Printf("\n[ERR] HTTP: could not create request: %s\n", err)
-			//os.Exit(1) // FIXME
+			//fmt.Printf("\n[ERR] HTTP: could not create request: %s\n", err)
+			log.Errorf("[ERR] Problem with HTTP request", "msg", err)
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -297,8 +301,8 @@ func main() {
 			// TODO: Error Handling
 			res, err := client.Do(req)
 			if err != nil {
-				fmt.Printf("\n[ERR] HTTP GET: could not create request: %s\n", err)
-				//os.Exit(1) // FIXME
+				//fmt.Printf("\n[ERR] HTTP GET: could not create request: %s\n", err)
+				log.Errorf("[ERR] Problem with HTTP request", "msg", err)
 				return c.Send("Проблемы со связью, попробуйте еще раз...")
 			}
 
@@ -325,8 +329,7 @@ func main() {
 		}
 
 		//return c.Send(string(job.Output))
-
-		fmt.Printf("\n\nFINISHED")
+		//fmt.Printf("\n\nFINISHED")
 
 		mu.Lock()
 		user.Status = "" // TODO: Enum all statuses and flow between them
@@ -358,14 +361,15 @@ func main() {
 
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
-			fmt.Printf("\n\nNEW SESSION") // DEBUG
+			//fmt.Printf("\n\nNEW SESSION") // DEBUG
+			log.Infof("[USER] New session", "user", tgUser.ID)
 			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo))]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
 
-		return c.Send("Starting new chat session...")
+		return c.Send("Начинаю новую сессию...")
 	})
 
 	// -- Switch into the PRO mode
@@ -382,7 +386,8 @@ func main() {
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
 
-		return c.Send("Switching to PRO mode...")
+		log.Infof("[USER] Switched to PRO plan", "user", tgUser.ID)
+		return c.Send("Включаю полную мощность...")
 	})
 
 	// -- Switch into the CHAT mode
@@ -399,9 +404,11 @@ func main() {
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
 
-		return c.Send("Switching to CHAT mode...")
+		log.Infof("[USER] Switched to CHAT mode", "user", tgUser.ID)
+		return c.Send("Переключаюсь в режим чата...")
 	})
 
-	fmt.Printf("\nListen for Telegram...")
+	fmt.Printf("\nStarting interchange with Telegram...")
+	log.Info("Starting interchange with Telegram...")
 	bot.Start()
 }
