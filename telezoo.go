@@ -117,6 +117,7 @@ func main() {
 	zapConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileEncoder := zapcore.NewJSONEncoder(zapConfig)
 	logFile, err := os.OpenFile( /*conf.Log*/ "telezoo.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// TODO: What if there two instances running in parallel?
 	if err != nil {
 		fmt.Printf("\n[ ERROR ] Can't init logging, shutdown...\n\n")
 		os.Exit(0)
