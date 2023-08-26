@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"os/signal"
@@ -176,15 +177,17 @@ func main() {
 			//	log.Infof("[STOP] Wait while [ %d ] requests will be finished...", pending)
 			//}
 
-			db, err := os.OpenFile( /*conf.Log*/ "telezoo.db", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			// TODO: Backup an older file before rewrite?
+			db, err := os.OpenFile("telezoo.db", os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				log.Info("[ERR] Cant dump users into file DB")
 			} else {
 				for _, user := range users {
 					userJSON, _ := json.Marshal(*user)
-					fmt.Printf("\n\nUSER JSON: %s", string(userJSON)) // DEBUG
+					//fmt.Printf("\n\nUSER JSON: %s", string(userJSON)) // DEBUG
 					db.WriteString(string(userJSON) + "\n")
 				}
+				db.Close()
 			}
 		}
 
@@ -206,6 +209,24 @@ func main() {
 		log.Info("[ STOP ] TeleZoo was stopped. Chiao!")
 		logger.Sync()
 	}()
+
+	// -- Read registered users from local DB
+
+	db, err := os.OpenFile("telezoo.db", os.O_RDONLY, 0644)
+	scanner := bufio.NewScanner(db)
+	//for _, user := range users {
+	for scanner.Scan() {
+		//userJSON, _ := json.Marshal(*user)
+		userJSON := scanner.Text()
+		fmt.Printf("\n\nUSER JSON: %s", string(userJSON)) // DEBUG
+		//db.WriteString(string(userJSON) + "\n")
+		user := &User{}
+		json.Unmarshal([]byte(userJSON), &user)
+		user.Status = "" // reset the status, but loose last processing messages
+		// TODO: Implement correct procedure to respawn dead servers
+		users[user.TGID] = user
+	}
+	db.Close()
 
 	// -- Set up bot
 
