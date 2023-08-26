@@ -27,6 +27,7 @@ import (
 
 const VERSION = "0.11.0"
 
+// [ ] TODO: Detect wrong hosts on start? [ ERR ] HTTP POST: could not create request: parse "http://209.137.198.8 :15415/jobs": invalid character " " in host name
 // [ ] FIXME: Inspect on start - are there another instance is running?
 // [ ] TODO: daemond
 // [*] TODO: Save user IDs into disk storage, SQLite vs json.Marshal?
@@ -309,8 +310,8 @@ func main() {
 		url := /*os.Getenv("FAST")*/ user.Server + "/jobs"
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
 		if err != nil {
+			user.Status = ""
 			fmt.Printf("\n[ ERR ] HTTP POST: could not create request: %s\n", err)
-			//os.Exit(1) // FIXME
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -321,7 +322,7 @@ func main() {
 
 		res, err := client.Do(req)
 		if err != nil {
-			//fmt.Printf("\n[ERR] HTTP: error making http request: %s\n", err)
+			user.Status = ""
 			log.Errorf("[ ERR ] Problem with HTTP request", "msg", err)
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
@@ -335,7 +336,7 @@ func main() {
 
 		req, err = http.NewRequest(http.MethodGet, url, nil)
 		if err != nil {
-			//fmt.Printf("\n[ERR] HTTP: could not create request: %s\n", err)
+			user.Status = ""
 			log.Errorf("[ ERR ] Problem with HTTP request", "msg", err)
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
