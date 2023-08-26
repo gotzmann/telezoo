@@ -9,7 +9,8 @@ import (
 
 	"fmt"
 	"io"
-	"log"
+
+	//"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -26,14 +27,14 @@ import (
 
 const VERSION = "0.8.0"
 
-// [ ] TODO: Save user IDs into disk storage, SQLite?
+// [*] TODO: Save user IDs into disk storage, SQLite vs json.Marshal?
 // [ ] TODO: Send an empty message (rotated icon???) even before trying to call GPU?
 // [ ] TODO: Catching picture into Hello Message
 // [ ] TODO: Find great 13B LLaMA v2 based model for CHAT mode
-// [ ] TODO: Proper logging
+// [*] TODO: Proper logging
 // [*] TODO: Start dialog with short instructions on how to use chat commands
 // [*] TODO: Handle SIGINT
-// [ ] TODO: Do graceful shutdown releasing all dialogs
+// [*] TODO: Do graceful shutdown releasing all dialogs
 // [ ] TODO: Proper deadlines and retries for HTTP calls
 // [*] TODO: Do not os.Exit() or log.Fatal or panic!
 // [*] TODO: Balancer between instances
@@ -48,6 +49,8 @@ var (
 	chatZoo []string
 	proZoo  []string
 	zoo     map[string][]string
+
+	log *zap.SugaredLogger
 )
 
 type Job struct {
@@ -122,10 +125,10 @@ func main() {
 	core := zapcore.NewTee(zapcore.NewCore(fileEncoder, zapWriter, zapcore.DebugLevel))
 	//logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	logger := zap.New(core)
-	log := logger.Sugar()
+	log = logger.Sugar()
 
-	fmt.Print("\nTeleZoo v" + VERSION + " is starting...")
-	log.Info("TeleZoo v" + VERSION + " is starting...")
+	fmt.Print("\n[ START ] TeleZoo v" + VERSION + " is starting...")
+	log.Info("[ START ] TeleZoo v" + VERSION + " is starting...")
 
 	// -- Init GPU pods
 
@@ -202,7 +205,7 @@ func main() {
 		reason := recover()
 		if reason != nil {
 			//Colorize("\n[light_magenta][ ERROR ][white] %s\n\n", reason)
-			log.Error("[ ERROR ] %s", reason)
+			log.Errorf("[ ERROR ] %s", reason)
 			//os.Exit(0)
 		}
 
@@ -218,7 +221,7 @@ func main() {
 	for scanner.Scan() {
 		//userJSON, _ := json.Marshal(*user)
 		userJSON := scanner.Text()
-		fmt.Printf("\n\nUSER JSON: %s", string(userJSON)) // DEBUG
+		//fmt.Printf("\n\nUSER JSON: %s", string(userJSON)) // DEBUG
 		//db.WriteString(string(userJSON) + "\n")
 		user := &User{}
 		json.Unmarshal([]byte(userJSON), &user)
@@ -232,19 +235,20 @@ func main() {
 
 	bot, err := tele.NewBot(pref)
 	if err != nil {
-		log.Fatal(err)
-		return
+		log.Fatal("[ ERR ] Cant create TG bot instance")
+		os.Exit(0)
 	}
 
 	// -- Handle user messages [ that weren't captured by other handlers ]
 
 	bot.Handle(tele.OnText, func(c tele.Context) error {
+		//log := logger.Sugar()
 
 		tgUser := c.Sender()
 		prompt := c.Text()
 
 		//fmt.Printf("\n\nNEW REQ: %+v", prompt)
-		log.Infof("[ MSG ] New message", "user", tgUser.ID, "prompt", prompt)
+		log.Infow("[ MSG ] New message", "user", tgUser.ID, "prompt", prompt)
 
 		var user *User
 		var ok bool
@@ -254,7 +258,7 @@ func main() {
 		mu.Lock()
 		if user, ok = users[tgUser.ID]; !ok {
 			//fmt.Printf("\n\nNEW USER: %d", tgUser.ID) // DEBUG
-			log.Infof("[ USER ] New user", "tgID", tgUser.ID)
+			log.Infow("[ USER ] New user", "user", tgUser.ID)
 			user = &User{
 				ID:        "",
 				TGID:      tgUser.ID,
@@ -403,13 +407,13 @@ func main() {
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
 			//fmt.Printf("\n\nNEW SESSION") // DEBUG
-			log.Infof("[ USER ] New session", "user", tgUser.ID)
 			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo))]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
 
+		log.Infow("[ USER ] New session", "user", tgUser.ID)
 		return c.Send("Начинаю новую сессию...")
 	})
 
@@ -427,7 +431,7 @@ func main() {
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
 
-		log.Infof("[ USER ] Switched to PRO plan", "user", tgUser.ID)
+		log.Infow("[ USER ] Switched to PRO plan", "user", tgUser.ID)
 		return c.Send("Включаю полную мощность...")
 	})
 
@@ -445,11 +449,11 @@ func main() {
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
 
-		log.Infof("[ USER ] Switched to CHAT mode", "user", tgUser.ID)
+		log.Infow("[ USER ] Switched to CHAT mode", "user", tgUser.ID)
 		return c.Send("Переключаюсь в режим чата...")
 	})
 
-	fmt.Printf("\nStarting interchange with Telegram...")
-	log.Info("Starting interchange with Telegram...")
+	fmt.Printf("\n[ START ] Starting interchange with Telegram...")
+	log.Info("[ START ] Start TG interchange...")
 	bot.Start()
 }
