@@ -265,7 +265,7 @@ func main() {
 				ID:        "",
 				TGID:      tgUser.ID,
 				Mode:      "chat",
-				Server:    zoo["chat"][rand.Intn(len(chatZoo))],
+				Server:    zoo["chat"][rand.Intn(len(chatZoo)-1)],
 				SessionID: uuid.New().String(),
 				Status:    "",
 			}
@@ -409,7 +409,7 @@ func main() {
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
 			user.Mode = "chat"
-			user.Server = zoo["chat"][rand.Intn(len(chatZoo))]
+			user.Server = zoo["chat"][rand.Intn(len(chatZoo)-1)]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
@@ -427,7 +427,7 @@ func main() {
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
 			user.Mode = "pro"
-			user.Server = zoo["pro"][rand.Intn(len(proZoo))]
+			user.Server = zoo["pro"][rand.Intn(len(proZoo)-1)]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
@@ -445,7 +445,7 @@ func main() {
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
 			user.Mode = "chat"
-			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo))]
+			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo)-1)]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
