@@ -25,7 +25,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.10.0"
+const VERSION = "0.11.0"
 
 // [ ] TODO: daemond
 // [*] TODO: Save user IDs into disk storage, SQLite vs json.Marshal?
