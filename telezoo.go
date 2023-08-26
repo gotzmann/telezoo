@@ -25,7 +25,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.9.0"
+const VERSION = "0.10.0"
 
 // [ ] TODO: daemond
 // [*] TODO: Save user IDs into disk storage, SQLite vs json.Marshal?
@@ -408,8 +408,8 @@ func main() {
 
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
-			//fmt.Printf("\n\nNEW SESSION") // DEBUG
-			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo))]
+			user.Mode = "chat"
+			user.Server = zoo["chat"][rand.Intn(len(chatZoo))]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
@@ -427,7 +427,7 @@ func main() {
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
 			user.Mode = "pro"
-			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo))]
+			user.Server = zoo["pro"][rand.Intn(len(proZoo))]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
