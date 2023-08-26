@@ -19,16 +19,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	tele "gopkg.in/telebot.v3"
 )
 
+// [ ] TODO: Save user IDs into disk storage, SQLite?
 // [ ] TODO: Send an empty message (rotated icon???) even before trying to call GPU?
 // [ ] TODO: Catching picture into Hello Message
 // [ ] TODO: Find great 13B LLaMA v2 based model for CHAT mode
 // [ ] TODO: Proper logging
-// [ ] TODO: Start dialog with short instructions on how to use chat commands
+// [*] TODO: Start dialog with short instructions on how to use chat commands
 // [*] TODO: Handle SIGINT
-// [ ] TODO: Do graceful shutdown
+// [ ] TODO: Do graceful shutdown releasing all dialogs
 // [ ] TODO: Proper deadlines and retries for HTTP calls
 // [*] TODO: Do not os.Exit() or log.Fatal or panic!
 // [*] TODO: Balancer between instances
@@ -93,14 +96,36 @@ func init() {
 
 func main() {
 
-	fmt.Printf("\nTeleZoo v0.7 is starting...")
-
 	// -- Read settings and init all
 
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
+	// -- Start logging
+
+	var zapWriter zapcore.WriteSyncer
+	zapConfig := zap.NewProductionEncoderConfig()
+	zapConfig.NameKey = "llamazoo" // TODO: pod name from config?
+	//zapConfig.CallerKey = ""       // do not log caller like "llamazoo/llamazoo.go:156"
+	zapConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileEncoder := zapcore.NewJSONEncoder(zapConfig)
+	logFile, err := os.OpenFile( /*conf.Log*/ "telezoo.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("\n[ ERROR ] Can't init logging, shutdown...\n\n")
+		os.Exit(0)
+	}
+	zapWriter = zapcore.AddSync(logFile)
+	core := zapcore.NewTee(zapcore.NewCore(fileEncoder, zapWriter, zapcore.DebugLevel))
+	//logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+	logger := zap.New(core)
+	log := logger.Sugar()
+
+	fmt.Print("\nTeleZoo v0.7 is starting...")
+	log.Info("TeleZoo v0.7 is starting...")
+
+	// -- Init GPU pods
 
 	chatZoo = strings.Split(os.Getenv("CHATZOO"), ",")
 	proZoo = strings.Split(os.Getenv("PROZOO"), ",")
@@ -122,15 +147,14 @@ func main() {
 
 	defer func() {
 		signal.Stop(signalChan)
-		//logger.Sync()
+		logger.Sync()
 		reason := recover()
 		if reason != nil {
 			//Colorize("\n[light_magenta][ ERROR ][white] %s\n\n", reason)
-			//log.Error("%s", reason)
+			log.Error("[ ERROR ] %s", reason)
 			os.Exit(0)
 		}
-		//Colorize("\n[light_magenta][ STOP ][light_blue] LLaMAZoo was stopped. Arrivederci!\n\n")
-		//log.Info("[STOP] LLaMAZoo was stopped. Arrivederci!")
+		log.Info("[STOP] TeleZoo was stopped. Chiao!")
 	}()
 
 	// --- Listen for OS signals in background
@@ -151,7 +175,7 @@ func main() {
 
 			//server.GoShutdown = true
 			//Colorize("\n[light_magenta][ STOP ][light_blue] Graceful shutdown...")
-			//log.Info("[STOP] Graceful shutdown...")
+			log.Info("[STOP] Graceful shutdown...")
 			//pending := len(server.Queue)
 			//if pending > 0 {
 			//	pending += 1 /*conf.Pods*/ // TODO: Allow N pods
