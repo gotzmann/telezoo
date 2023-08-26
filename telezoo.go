@@ -137,7 +137,7 @@ func main() {
 	chatZoo = strings.Split(os.Getenv("CHATZOO"), ",")
 	proZoo = strings.Split(os.Getenv("PROZOO"), ",")
 	zoo["chat"] = chatZoo
-	zoo["pro"] = chatZoo
+	zoo["pro"] = proZoo
 
 	pref := tele.Settings{
 		Token:  os.Getenv("TELEGRAM_TOKEN"),
@@ -420,6 +420,7 @@ func main() {
 			user.Mode = "chat"
 			user.Server = zoo["chat"][pod]
 			user.SessionID = uuid.New().String()
+			//fmt.Printf("\n\nUSER FOUND !!!")
 		}
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
@@ -433,9 +434,9 @@ func main() {
 	bot.Handle("/pro", func(c tele.Context) error {
 		tgUser := c.Sender()
 
-		pod := rand.Intn(len(chatZoo))
-		for pod == len(chatZoo) {
-			pod = rand.Intn(len(chatZoo))
+		pod := rand.Intn(len(proZoo))
+		for pod == len(proZoo) {
+			pod = rand.Intn(len(proZoo))
 		}
 
 		mu.Lock()
@@ -443,6 +444,7 @@ func main() {
 			user.Mode = "pro"
 			user.Server = zoo["pro"][pod]
 			user.SessionID = uuid.New().String()
+			//fmt.Printf("\n\nUSER FOUND !!!")
 		}
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
