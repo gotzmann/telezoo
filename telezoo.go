@@ -261,11 +261,15 @@ func main() {
 		if user, ok = users[tgUser.ID]; !ok {
 			//fmt.Printf("\n\nNEW USER: %d", tgUser.ID) // DEBUG
 			log.Infow("[ USER ] New user", "user", tgUser.ID)
+			pod := rand.Intn(len(chatZoo))
+			for pod == len(chatZoo) {
+				pod = rand.Intn(len(chatZoo))
+			}
 			user = &User{
 				ID:        "",
 				TGID:      tgUser.ID,
 				Mode:      "chat",
-				Server:    zoo["chat"][rand.Intn(len(chatZoo)-1)],
+				Server:    zoo["chat"][pod],
 				SessionID: uuid.New().String(),
 				Status:    "",
 			}
@@ -406,10 +410,15 @@ func main() {
 	bot.Handle("/new", func(c tele.Context) error {
 		tgUser := c.Sender()
 
+		pod := rand.Intn(len(chatZoo))
+		for pod == len(chatZoo) {
+			pod = rand.Intn(len(chatZoo))
+		}
+
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
 			user.Mode = "chat"
-			user.Server = zoo["chat"][rand.Intn(len(chatZoo)-1)]
+			user.Server = zoo["chat"][pod]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
@@ -424,10 +433,15 @@ func main() {
 	bot.Handle("/pro", func(c tele.Context) error {
 		tgUser := c.Sender()
 
+		pod := rand.Intn(len(chatZoo))
+		for pod == len(chatZoo) {
+			pod = rand.Intn(len(chatZoo))
+		}
+
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
 			user.Mode = "pro"
-			user.Server = zoo["pro"][rand.Intn(len(proZoo)-1)]
+			user.Server = zoo["pro"][pod]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
@@ -442,10 +456,15 @@ func main() {
 	bot.Handle("/chat", func(c tele.Context) error {
 		tgUser := c.Sender()
 
+		pod := rand.Intn(len(chatZoo))
+		for pod == len(chatZoo) {
+			pod = rand.Intn(len(chatZoo))
+		}
+
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
 			user.Mode = "chat"
-			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo)-1)]
+			user.Server = zoo[user.Mode][pod]
 			user.SessionID = uuid.New().String()
 		}
 		// FIXME: What if there no such user? After server restart, etc
