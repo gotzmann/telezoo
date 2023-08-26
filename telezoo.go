@@ -2,11 +2,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os/signal"
 	"syscall"
 
-	//"crypto/rand"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -58,12 +57,12 @@ type Job struct {
 }
 
 type User struct {
-	ID        string // User ID within external system
-	TGID      int64  // User ID within Telegram
-	Mode      string // pro / chat
-	SessionID string // current session
-	Status    string
-	Server    string // Server address for sticky sessions
+	ID        string `json:"id,omitempty"`      // User ID within external system
+	TGID      int64  `json:"tgid,omitempty"`    // User ID within Telegram
+	Mode      string `json:"mode,omitempty"`    // pro / chat
+	SessionID string `json:"session,omitempty"` // current session
+	Status    string `json:"status,omitempty"`  // processing status
+	Server    string `json:"server,omitempty"`  // Server address for sticky sessions
 }
 
 type Session struct {
@@ -142,26 +141,17 @@ func main() {
 	// --- Allow graceful shutdown via OS signals
 	// https://ieftimov.com/posts/four-steps-daemonize-your-golang-programs/
 
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-
-	// --- Do all we need in case of graceful shutdown or unexpected panic
-
-	defer func() {
-		signal.Stop(signalChan)
-		logger.Sync()
-		reason := recover()
-		if reason != nil {
-			//Colorize("\n[light_magenta][ ERROR ][white] %s\n\n", reason)
-			log.Error("[ ERROR ] %s", reason)
-			os.Exit(0)
-		}
-		log.Info("[STOP] TeleZoo was stopped. Chiao!")
-	}()
+	signalChan := make(chan os.Signal)
+	signal.Notify(signalChan,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
 
 	// --- Listen for OS signals in background
 
 	go func() {
+
 		select {
 		case <-signalChan:
 
@@ -177,14 +167,44 @@ func main() {
 
 			//server.GoShutdown = true
 			//Colorize("\n[light_magenta][ STOP ][light_blue] Graceful shutdown...")
-			log.Info("[STOP] Graceful shutdown...")
+			fmt.Print("\n[ STOP ] Graceful shutdown...")
+			log.Info("[ STOP ] Graceful shutdown...")
 			//pending := len(server.Queue)
 			//if pending > 0 {
 			//	pending += 1 /*conf.Pods*/ // TODO: Allow N pods
 			//	Colorize("\n[light_magenta][ STOP ][light_blue] Wait while [light_magenta][ %d ][light_blue] requests will be finished...", pending)
 			//	log.Infof("[STOP] Wait while [ %d ] requests will be finished...", pending)
 			//}
+
+			db, err := os.OpenFile( /*conf.Log*/ "telezoo.db", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Info("[ERR] Cant dump users into file DB")
+			} else {
+				for _, user := range users {
+					userJSON, _ := json.Marshal(*user)
+					fmt.Printf("\n\nUSER JSON: %s", string(userJSON)) // DEBUG
+					db.WriteString(string(userJSON) + "\n")
+				}
+			}
 		}
+
+		os.Exit(0)
+	}()
+
+	// --- Do all we need in case of graceful shutdown or unexpected panic
+
+	defer func() {
+		signal.Stop(signalChan)
+
+		reason := recover()
+		if reason != nil {
+			//Colorize("\n[light_magenta][ ERROR ][white] %s\n\n", reason)
+			log.Error("[ ERROR ] %s", reason)
+			//os.Exit(0)
+		}
+
+		log.Info("[ STOP ] TeleZoo was stopped. Chiao!")
+		logger.Sync()
 	}()
 
 	// -- Set up bot
@@ -203,7 +223,7 @@ func main() {
 		prompt := c.Text()
 
 		//fmt.Printf("\n\nNEW REQ: %+v", prompt)
-		log.Infof("[MSG] New message", "user", tgUser.ID, "prompt", prompt)
+		log.Infof("[ MSG ] New message", "user", tgUser.ID, "prompt", prompt)
 
 		var user *User
 		var ok bool
@@ -213,7 +233,7 @@ func main() {
 		mu.Lock()
 		if user, ok = users[tgUser.ID]; !ok {
 			//fmt.Printf("\n\nNEW USER: %d", tgUser.ID) // DEBUG
-			log.Infof("[USER] New user", "tgID", tgUser.ID)
+			log.Infof("[ USER ] New user", "tgID", tgUser.ID)
 			user = &User{
 				ID:        "",
 				TGID:      tgUser.ID,
@@ -257,7 +277,7 @@ func main() {
 		url := /*os.Getenv("FAST")*/ user.Server + "/jobs"
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
 		if err != nil {
-			fmt.Printf("\n[ERR] HTTP POST: could not create request: %s\n", err)
+			fmt.Printf("\n[ ERR ] HTTP POST: could not create request: %s\n", err)
 			//os.Exit(1) // FIXME
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
@@ -270,7 +290,7 @@ func main() {
 		res, err := client.Do(req)
 		if err != nil {
 			//fmt.Printf("\n[ERR] HTTP: error making http request: %s\n", err)
-			log.Errorf("[ERR] Problem with HTTP request", "msg", err)
+			log.Errorf("[ ERR ] Problem with HTTP request", "msg", err)
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		defer res.Body.Close()
@@ -284,7 +304,7 @@ func main() {
 		req, err = http.NewRequest(http.MethodGet, url, nil)
 		if err != nil {
 			//fmt.Printf("\n[ERR] HTTP: could not create request: %s\n", err)
-			log.Errorf("[ERR] Problem with HTTP request", "msg", err)
+			log.Errorf("[ ERR ] Problem with HTTP request", "msg", err)
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -362,7 +382,7 @@ func main() {
 		mu.Lock()
 		if user, ok := users[tgUser.ID]; ok {
 			//fmt.Printf("\n\nNEW SESSION") // DEBUG
-			log.Infof("[USER] New session", "user", tgUser.ID)
+			log.Infof("[ USER ] New session", "user", tgUser.ID)
 			user.Server = zoo[user.Mode][rand.Intn(len(chatZoo))]
 			user.SessionID = uuid.New().String()
 		}
@@ -386,7 +406,7 @@ func main() {
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
 
-		log.Infof("[USER] Switched to PRO plan", "user", tgUser.ID)
+		log.Infof("[ USER ] Switched to PRO plan", "user", tgUser.ID)
 		return c.Send("Включаю полную мощность...")
 	})
 
@@ -404,7 +424,7 @@ func main() {
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
 
-		log.Infof("[USER] Switched to CHAT mode", "user", tgUser.ID)
+		log.Infof("[ USER ] Switched to CHAT mode", "user", tgUser.ID)
 		return c.Send("Переключаюсь в режим чата...")
 	})
 
