@@ -25,10 +25,10 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.12.0"
+const VERSION = "0.13.0"
 
 // [ ] TODO: Detect wrong hosts on start? [ ERR ] HTTP POST: could not create request: parse "http://209.137.198.8 :15415/jobs": invalid character " " in host name
-// [ ] FIXME: Inspect on start - are there another instance is running?
+// [ ] FIXME: Inspect on start - are there another instance still running?
 // [ ] TODO: daemond
 // [*] TODO: Save user IDs into disk storage, SQLite vs json.Marshal?
 // [ ] TODO: Send an empty message (rotated icon???) even before trying to call GPU?
@@ -217,22 +217,20 @@ func main() {
 		logger.Sync()
 	}()
 
-	// -- Read registered users from local DB
+	// -- Read existing users from local DB [ ugly draft for faster development ]
 
 	db, err := os.OpenFile("telezoo.db", os.O_RDONLY, 0644)
 	scanner := bufio.NewScanner(db)
-	//for _, user := range users {
+
 	for scanner.Scan() {
-		//userJSON, _ := json.Marshal(*user)
 		userJSON := scanner.Text()
-		//fmt.Printf("\n\nUSER JSON: %s", string(userJSON)) // DEBUG
-		//db.WriteString(string(userJSON) + "\n")
 		user := &User{}
 		json.Unmarshal([]byte(userJSON), &user)
 		user.Status = "" // reset the status, but loose last processing messages
 		// TODO: Implement correct procedure to respawn dead servers
 		users[user.TGID] = user
 	}
+
 	db.Close()
 
 	// -- Set up bot
@@ -329,49 +327,59 @@ func main() {
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		defer res.Body.Close()
-		/*
-			url = user.Server + "/jobs/" + id
-			req, err = http.NewRequest(http.MethodGet, url, nil)
-			if err != nil {
-				user.Status = ""
-				log.Errorf("[ ERR ] Problem with HTTP request", "msg", err)
-				return c.Send("Проблемы со связью, попробуйте еще раз...")
-			}
-			req.Header.Set("Content-Type", "application/json")
-		*/
+
+		// wait for 1 sec to provide GPU with some time to start doing the task
+		time.Sleep(1000 * time.Millisecond)
+
+		url = user.Server + "/jobs/" + id
+		req, err = http.NewRequest(http.MethodGet, url, nil)
+		// There should not be an errors at all, so just log it and return nothing
+		if err != nil {
+			user.Status = ""
+			log.Errorf("[ ERR ] Unexpected problem while creating HTTP request", "msg", err)
+			//return c.Send("Неожиданная проблема на сервере :(")
+			return nil
+		}
+		req.Header.Set("Content-Type", "application/json")
+
 		var job Job
 		var msg *tele.Message
-		for job.Status != "finished" {
-			// TODO: Better and robust handling with error checking and deadlines
+		for {
 
-			// TODO: Error Handling
+			// FIXME: Better and robust handling with error checking and deadlines
 			res, err := fastHTTP.Do(req)
 			if err != nil {
-				//fmt.Printf("\n[ERR] HTTP GET: could not create request: %s\n", err)
 				log.Errorf("[ERR] Problem with HTTP request", "msg", err)
-				return c.Send("Проблемы со связью, попробуйте еще раз...")
+				//return c.Send("Проблемы со связью, попробуйте еще раз...")
+				time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
+				continue
 			}
 
 			output, err := io.ReadAll(res.Body)
 			json.Unmarshal(output, &job) // TODO: Error Handling
 
+			// create the message if needed, or edit existing with the new content
 			if msg == nil {
-				msg, _ = bot.Send(tgUser /*string(output)*/, job.Output)
+				msg, _ = bot.Send(tgUser, job.Output)
 			} else {
 				bot.Edit(msg, job.Output)
 			}
 
-			//fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
-			time.Sleep(200 * time.Millisecond)
+			// FIXME: We need MORE conditions to leave the loop
+			if job.Status == "finished" {
+				break
+			}
 
+			//fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
+			time.Sleep(300 * time.Millisecond)
 		}
 
 		//return c.Send(string(job.Output))
 		//fmt.Printf("\n\nFINISHED")
 
-		mu.Lock()
+		//mu.Lock()
 		user.Status = "" // TODO: Enum all statuses and flow between them
-		mu.Unlock()
+		//mu.Unlock()
 
 		return nil
 	})
