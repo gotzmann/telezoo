@@ -353,14 +353,20 @@ func main() {
 			// FIXME: Better and robust handling with error checking and deadlines
 			res, err := fastHTTP.Do(req)
 			if err != nil {
-				log.Errorw("[ERR] Problem with HTTP request", "msg", err)
+				log.Errorw("[ ERR ] Problem with HTTP request", "msg", err)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
 				continue
 			}
 
 			body, err := io.ReadAll(res.Body)
-			json.Unmarshal(body, &job) // TODO: Error Handling
+			err = json.Unmarshal(body, &job) // TODO: Error Handling
+			if err != nil {
+				log.Errorw("[ ERR ] Problem unmarshalling JSON response", "msg", err)
+				//return c.Send("Проблемы со связью, попробуйте еще раз...")
+				time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
+				continue
+			}
 
 			// do some replacing to allow correct Telegram Markdown
 			output := job.Output
@@ -388,6 +394,7 @@ func main() {
 		//return c.Send(string(job.Output))
 		//fmt.Printf("\n\nFINISHED")
 
+		log.Infow("[ MSG ] Message 100 percent finished")
 		//mu.Lock()
 		user.Status = "" // TODO: Enum all statuses and flow between them
 		//mu.Unlock()
