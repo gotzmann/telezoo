@@ -24,6 +24,7 @@ import (
 
 const VERSION = "0.13.0"
 
+// [ ] FIXME: If the .env was changed and there no more the host, that was sticked to the user or session, dump the older host!
 // [ ] TODO: Detect wrong hosts on start? [ ERR ] HTTP POST: could not create request: parse "http://209.137.198.8 :15415/jobs": invalid character " " in host name
 // [ ] FIXME: Inspect on start - are there another instance still running?
 // [ ] TODO: daemond
@@ -202,7 +203,7 @@ func main() {
 		reason := recover()
 		if reason != nil {
 			//Colorize("\n[light_magenta][ ERROR ][white] %s\n\n", reason)
-			log.Errorf("[ ERR ] There an panic", "msg", reason)
+			log.Errorw("[ ERR ] There an panic", "msg", reason)
 			//os.Exit(0)
 		}
 
@@ -240,6 +241,15 @@ func main() {
 		os.Exit(0)
 	}
 
+	randomPod := func(mode string) string {
+		max := len(zoo[mode])
+		pod := rand.Intn(max)
+		for pod == max {
+			pod = rand.Intn(max)
+		}
+		return zoo[mode][pod]
+	}
+
 	// -- Handle user messages [ that weren't captured by other handlers ]
 
 	bot.Handle(tele.OnText, func(c tele.Context) error {
@@ -261,16 +271,11 @@ func main() {
 		if !found {
 			log.Infow("[ USER ] New user", "user", tgUser.ID)
 
-			pod := rand.Intn(len(chatZoo))
-			for pod == len(chatZoo) {
-				pod = rand.Intn(len(chatZoo))
-			}
-
 			user = &User{
 				ID:        "",
 				TGID:      tgUser.ID,
 				Mode:      "chat",
-				Server:    zoo["chat"][pod],
+				Server:    randomPod("chat"),
 				SessionID: uuid.New().String(),
 				Status:    "",
 			}
@@ -313,7 +318,7 @@ func main() {
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
 		if err != nil {
 			user.Status = ""
-			log.Errorf("[ ERR ] Could not create HTTP request", "msg", err)
+			log.Errorw("[ ERR ] Could not create HTTP request", "msg", err)
 			return c.Send("Не могу работать с этим запросом :(")
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -322,7 +327,7 @@ func main() {
 		res, err := slowHTTP.Do(req)
 		if err != nil {
 			user.Status = ""
-			log.Errorf("[ ERR ] Problem with HTTP request", "msg", err)
+			log.Errorw("[ ERR ] Problem with HTTP request", "msg", err)
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		defer res.Body.Close()
@@ -335,7 +340,7 @@ func main() {
 		// There should not be an errors at all, so just log it and return nothing
 		if err != nil {
 			user.Status = ""
-			log.Errorf("[ ERR ] Unexpected problem while creating HTTP request", "msg", err)
+			log.Errorw("[ ERR ] Unexpected problem while creating HTTP request", "msg", err)
 			//return c.Send("Неожиданная проблема на сервере :(")
 			return nil
 		}
@@ -348,7 +353,7 @@ func main() {
 			// FIXME: Better and robust handling with error checking and deadlines
 			res, err := fastHTTP.Do(req)
 			if err != nil {
-				log.Errorf("[ERR] Problem with HTTP request", "msg", err)
+				log.Errorw("[ERR] Problem with HTTP request", "msg", err)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
 				continue
@@ -359,7 +364,7 @@ func main() {
 
 			// do some replacing to allow correct Telegram Markdown
 			output := job.Output
-			output = strings.ReplaceAll(output, "\n* ", "\n- ")
+			output = strings.ReplaceAll(output, "\n* ", "\n- ") // TODO: bullet? middle point?
 			output = strings.ReplaceAll(output, "**", "*")
 			output = strings.ReplaceAll(output, "__", "_")
 
@@ -411,19 +416,16 @@ func main() {
 	bot.Handle("/new", func(c tele.Context) error {
 		tgUser := c.Sender()
 
-		pod := rand.Intn(len(chatZoo))
-		for pod == len(chatZoo) {
-			pod = rand.Intn(len(chatZoo))
+		mu.Lock()
+		user, found := users[tgUser.ID]
+		mu.Unlock()
+
+		if !found {
+			return nil // FIXME: Is it possible?
 		}
 
-		mu.Lock()
-		if user, ok := users[tgUser.ID]; ok {
-			user.Mode = "chat"
-			user.Server = zoo["chat"][pod]
-			user.SessionID = uuid.New().String()
-		}
-		// FIXME: What if there no such user? After server restart, etc
-		mu.Unlock()
+		user.Server = randomPod(user.Mode)
+		user.SessionID = uuid.New().String()
 
 		log.Infow("[ USER ] New session", "user", tgUser.ID)
 		return c.Send("Начинаю новую сессию...")
@@ -434,19 +436,17 @@ func main() {
 	bot.Handle("/pro", func(c tele.Context) error {
 		tgUser := c.Sender()
 
-		pod := rand.Intn(len(proZoo))
-		for pod == len(proZoo) {
-			pod = rand.Intn(len(proZoo))
+		mu.Lock()
+		user, found := users[tgUser.ID]
+		mu.Unlock()
+
+		if !found {
+			return nil // FIXME: Is it possible?
 		}
 
-		mu.Lock()
-		if user, ok := users[tgUser.ID]; ok {
-			user.Mode = "pro"
-			user.Server = zoo["pro"][pod]
-			user.SessionID = uuid.New().String()
-		}
-		// FIXME: What if there no such user? After server restart, etc
-		mu.Unlock()
+		user.Mode = "pro"
+		user.Server = randomPod(user.Mode)
+		user.SessionID = uuid.New().String()
 
 		log.Infow("[ USER ] Switched to PRO plan", "user", tgUser.ID)
 		return c.Send("Включаю полную мощность...")
@@ -457,19 +457,17 @@ func main() {
 	bot.Handle("/chat", func(c tele.Context) error {
 		tgUser := c.Sender()
 
-		pod := rand.Intn(len(chatZoo))
-		for pod == len(chatZoo) {
-			pod = rand.Intn(len(chatZoo))
+		mu.Lock()
+		user, found := users[tgUser.ID]
+		mu.Unlock()
+
+		if !found {
+			return nil // FIXME: Is it possible?
 		}
 
-		mu.Lock()
-		if user, ok := users[tgUser.ID]; ok {
-			user.Mode = "chat"
-			user.Server = zoo[user.Mode][pod]
-			user.SessionID = uuid.New().String()
-		}
-		// FIXME: What if there no such user? After server restart, etc
-		mu.Unlock()
+		user.Mode = "chat"
+		user.Server = randomPod(user.Mode)
+		user.SessionID = uuid.New().String()
 
 		log.Infow("[ USER ] Switched to CHAT mode", "user", tgUser.ID)
 		return c.Send("Переключаюсь в режим чата...")
