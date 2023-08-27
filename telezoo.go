@@ -4,18 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"os/signal"
-	"syscall"
-
 	"fmt"
 	"io"
-
-	//"log"
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -108,26 +105,27 @@ func main() {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		fmt.Printf("\n[ ERROR ] Cant load .env file, shutdown...\n\n")
+		os.Exit(0)
 	}
 
 	// -- Start logging
 
 	var zapWriter zapcore.WriteSyncer
 	zapConfig := zap.NewProductionEncoderConfig()
-	zapConfig.NameKey = "llamazoo" // TODO: pod name from config?
-	//zapConfig.CallerKey = ""       // do not log caller like "llamazoo/llamazoo.go:156"
+	zapConfig.NameKey = "telezoo"
 	zapConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	fileEncoder := zapcore.NewJSONEncoder(zapConfig)
-	logFile, err := os.OpenFile( /*conf.Log*/ "telezoo.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile("telezoo.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
 	// TODO: What if there two instances running in parallel?
 	if err != nil {
 		fmt.Printf("\n[ ERROR ] Can't init logging, shutdown...\n\n")
 		os.Exit(0)
 	}
+
 	zapWriter = zapcore.AddSync(logFile)
 	core := zapcore.NewTee(zapcore.NewCore(fileEncoder, zapWriter, zapcore.DebugLevel))
-	//logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	logger := zap.New(core)
 	log = logger.Sugar()
 
@@ -209,7 +207,7 @@ func main() {
 		reason := recover()
 		if reason != nil {
 			//Colorize("\n[light_magenta][ ERROR ][white] %s\n\n", reason)
-			log.Errorf("[ ERROR ] %s", reason)
+			log.Errorf("[ ERR ] There an panic", "msg", reason)
 			//os.Exit(0)
 		}
 
@@ -416,7 +414,6 @@ func main() {
 			user.Mode = "chat"
 			user.Server = zoo["chat"][pod]
 			user.SessionID = uuid.New().String()
-			//fmt.Printf("\n\nUSER FOUND !!!")
 		}
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
@@ -440,7 +437,6 @@ func main() {
 			user.Mode = "pro"
 			user.Server = zoo["pro"][pod]
 			user.SessionID = uuid.New().String()
-			//fmt.Printf("\n\nUSER FOUND !!!")
 		}
 		// FIXME: What if there no such user? After server restart, etc
 		mu.Unlock()
