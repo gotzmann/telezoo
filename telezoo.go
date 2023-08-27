@@ -25,7 +25,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.11.0"
+const VERSION = "0.12.0"
 
 // [ ] TODO: Detect wrong hosts on start? [ ERR ] HTTP POST: could not create request: parse "http://209.137.198.8 :15415/jobs": invalid character " " in host name
 // [ ] FIXME: Inspect on start - are there another instance is running?
@@ -246,27 +246,29 @@ func main() {
 	// -- Handle user messages [ that weren't captured by other handlers ]
 
 	bot.Handle(tele.OnText, func(c tele.Context) error {
-		//log := logger.Sugar()
-
 		tgUser := c.Sender()
 		prompt := c.Text()
 
-		//fmt.Printf("\n\nNEW REQ: %+v", prompt)
 		log.Infow("[ MSG ] New message", "user", tgUser.ID, "prompt", prompt)
 
-		var user *User
-		var ok bool
+		// allow more time for important requests and less for those which might be ignored
+		slowHTTP := http.Client{Timeout: 5 * time.Second}
+		fastHTTP := http.Client{Timeout: 1 * time.Second}
+
+		mu.Lock()
+		user, found := users[tgUser.ID]
+		mu.Unlock()
 
 		// -- new user ?
 
-		mu.Lock()
-		if user, ok = users[tgUser.ID]; !ok {
-			//fmt.Printf("\n\nNEW USER: %d", tgUser.ID) // DEBUG
+		if !found {
 			log.Infow("[ USER ] New user", "user", tgUser.ID)
+
 			pod := rand.Intn(len(chatZoo))
 			for pod == len(chatZoo) {
 				pod = rand.Intn(len(chatZoo))
 			}
+
 			user = &User{
 				ID:        "",
 				TGID:      tgUser.ID,
@@ -275,84 +277,75 @@ func main() {
 				SessionID: uuid.New().String(),
 				Status:    "",
 			}
+
+			mu.Lock()
 			users[tgUser.ID] = user
+			mu.Unlock()
+
 			// send hello message with instructions
-			bot.Send(tgUser, helloMessage)
+			bot.Send(tgUser, helloMessage) // TODO: Handle errors
 		}
-		mu.Unlock()
 
-		// -- catch processing GPU slot for the current request, or wait while it will be available
-		//    this allows to process multiple DDoS requests from the same users one by one
-		//    TODO: wathcdog / deadline to break deadlocks
+		// catch processing GPU slot for the current request
+		// or wait if there previous one which is not freed
+		// this allows to process multiple DDoS requests from the same users sequentially
+		// TODO: wathcdog / deadline to break deadlocks
 
-		breakLoop := false
+		allowProcessing := false
 		for {
 			mu.Lock()
 			if user.Status != "processing" {
 				user.Status = "processing"
-				breakLoop = true
+				allowProcessing = true
 			}
 			mu.Unlock()
-			if breakLoop {
+			if allowProcessing {
 				break
 			}
 			//fmt.Printf(" [ WAIT-FOR-GPU-SLOT ] ") // DEBUG
 			time.Sleep(200 * time.Millisecond)
 		}
 
+		// -- create JSON request body
 		id := uuid.New().String()
-
 		body := "{ \"id\": \"" + id + "\", \"session\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\" }"
 		bodyReader := bytes.NewReader([]byte(body))
 
-		//fmt.Printf("\n\nREQ: %s", body)
-
-		url := /*os.Getenv("FAST")*/ user.Server + "/jobs"
+		// -- create HTTP request
+		url := user.Server + "/jobs"
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
 		if err != nil {
 			user.Status = ""
-			fmt.Printf("\n[ ERR ] HTTP POST: could not create request: %s\n", err)
-			return c.Send("Проблемы со связью, попробуйте еще раз...")
+			log.Errorf("[ ERR ] Could not create HTTP request", "msg", err)
+			return c.Send("Не могу работать с этим запросом :(")
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		client := http.Client{
-			Timeout: 5 * time.Second,
-		}
-
-		res, err := client.Do(req)
+		// -- send request to GPU pod
+		res, err := slowHTTP.Do(req)
 		if err != nil {
 			user.Status = ""
 			log.Errorf("[ ERR ] Problem with HTTP request", "msg", err)
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		defer res.Body.Close()
-
-		//fmt.Printf("\n\n%+v", res)
-		//fmt.Printf("\n\n%+v", res.Body)
-
-		url = /*os.Getenv("FAST")*/ user.Server + "/jobs/" + id
-		//fmt.Printf("\n ===> %s", url)
-
-		req, err = http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			user.Status = ""
-			log.Errorf("[ ERR ] Problem with HTTP request", "msg", err)
-			return c.Send("Проблемы со связью, попробуйте еще раз...")
-		}
-		req.Header.Set("Content-Type", "application/json")
-
+		/*
+			url = user.Server + "/jobs/" + id
+			req, err = http.NewRequest(http.MethodGet, url, nil)
+			if err != nil {
+				user.Status = ""
+				log.Errorf("[ ERR ] Problem with HTTP request", "msg", err)
+				return c.Send("Проблемы со связью, попробуйте еще раз...")
+			}
+			req.Header.Set("Content-Type", "application/json")
+		*/
 		var job Job
 		var msg *tele.Message
 		for job.Status != "finished" {
 			// TODO: Better and robust handling with error checking and deadlines
 
-			//client := http.Client{
-			//    Timeout: 30 * time.Second,
-			//}
-
 			// TODO: Error Handling
-			res, err := client.Do(req)
+			res, err := fastHTTP.Do(req)
 			if err != nil {
 				//fmt.Printf("\n[ERR] HTTP GET: could not create request: %s\n", err)
 				log.Errorf("[ERR] Problem with HTTP request", "msg", err)
@@ -360,9 +353,6 @@ func main() {
 			}
 
 			output, err := io.ReadAll(res.Body)
-
-			//fmt.Printf("\n=> %+v", string(output))
-
 			json.Unmarshal(output, &job) // TODO: Error Handling
 
 			if msg == nil {
@@ -370,11 +360,6 @@ func main() {
 			} else {
 				bot.Edit(msg, job.Output)
 			}
-
-			//fmt.Printf("\n=> %+v", job)
-
-			//body := "{\"id\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\"}"
-			//bodyReader := bytes.NewReader([]byte(body))
 
 			//fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
 			time.Sleep(200 * time.Millisecond)
