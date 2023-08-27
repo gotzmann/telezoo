@@ -32,8 +32,8 @@ const VERSION = "0.13.0"
 // [ ] TODO: daemond
 // [*] TODO: Save user IDs into disk storage, SQLite vs json.Marshal?
 // [ ] TODO: Send an empty message (rotated icon???) even before trying to call GPU?
-// [ ] TODO: Catching picture into Hello Message
-// [ ] TODO: Find great 13B LLaMA v2 based model for CHAT mode
+// [ ] TODO: Paste eye catching picture inside Hello Message
+// [ ] TODO: Find great 13B / 30B LLaMA model for CHAT mode
 // [*] TODO: Proper logging
 // [*] TODO: Start dialog with short instructions on how to use chat commands
 // [*] TODO: Handle SIGINT
@@ -374,6 +374,7 @@ func main() {
 			time.Sleep(300 * time.Millisecond)
 		}
 
+		// TODO: Log finished message with time elapsed
 		//return c.Send(string(job.Output))
 		//fmt.Printf("\n\nFINISHED")
 
