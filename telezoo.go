@@ -203,7 +203,7 @@ func main() {
 		reason := recover()
 		if reason != nil {
 			//Colorize("\n[light_magenta][ ERROR ][white] %s\n\n", reason)
-			log.Errorw("[ ERR ] There an panic", "msg", reason)
+			log.Errorw("[ ERR ] There's a panic", "msg", reason)
 			//os.Exit(0)
 		}
 
