@@ -139,11 +139,6 @@ func main() {
 	zoo["chat"] = chatZoo
 	zoo["pro"] = proZoo
 
-	pref := tele.Settings{
-		Token:  os.Getenv("TELEGRAM_TOKEN"),
-		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
-	}
-
 	// --- Allow graceful shutdown via OS signals
 	// https://ieftimov.com/posts/four-steps-daemonize-your-golang-programs/
 
@@ -232,6 +227,12 @@ func main() {
 	db.Close()
 
 	// -- Set up bot
+
+	pref := tele.Settings{
+		Token:     os.Getenv("TELEGRAM_TOKEN"),
+		Poller:    &tele.LongPoller{Timeout: 10 * time.Second},
+		ParseMode: "Markdown",
+	}
 
 	bot, err := tele.NewBot(pref)
 	if err != nil {
@@ -353,14 +354,20 @@ func main() {
 				continue
 			}
 
-			output, err := io.ReadAll(res.Body)
-			json.Unmarshal(output, &job) // TODO: Error Handling
+			body, err := io.ReadAll(res.Body)
+			json.Unmarshal(body, &job) // TODO: Error Handling
+
+			// do some replacing to allow correct Telegram Markdown
+			output := job.Output
+			output = strings.ReplaceAll(output, "\n* ", "\n- ")
+			output = strings.ReplaceAll(output, "**", "*")
+			output = strings.ReplaceAll(output, "__", "_")
 
 			// create the message if needed, or edit existing with the new content
 			if msg == nil {
-				msg, _ = bot.Send(tgUser, job.Output)
+				msg, _ = bot.Send(tgUser, output)
 			} else {
-				bot.Edit(msg, job.Output)
+				bot.Edit(msg, output)
 			}
 
 			// FIXME: We need MORE conditions to leave the loop
