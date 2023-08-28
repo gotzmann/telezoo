@@ -260,8 +260,8 @@ func main() {
 		log.Infow("[ MSG ] New message", "user", tgUser.ID, "prompt", prompt)
 
 		// allow more time for important requests and less for those which might be ignored
-		slowHTTP := http.Client{Timeout: 5 * time.Second}
-		fastHTTP := http.Client{Timeout: 1 * time.Second}
+		slowHTTP := http.Client{Timeout: 10 * time.Second}
+		fastHTTP := http.Client{Timeout: 2 * time.Second}
 
 		mu.Lock()
 		user, found := users[tgUser.ID]
@@ -306,7 +306,7 @@ func main() {
 				break
 			}
 			//fmt.Printf(" [ WAIT-FOR-GPU-SLOT ] ") // DEBUG
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(300 * time.Millisecond)
 		}
 
 		// -- create JSON request body
@@ -351,18 +351,22 @@ func main() {
 		var msg *tele.Message
 		for {
 
+			fmt.Printf("\nfastHTTP.Do...")
 			// FIXME: Better and robust handling with error checking and deadlines
 			res, err := fastHTTP.Do(req)
 			if err != nil {
+				fmt.Printf("\nERROR = %s", err.Error())
 				log.Errorw("[ ERR ] Problem with HTTP request", "msg", err)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
 				continue
 			}
 
+			fmt.Printf("\njson.Unmarshal...")
 			body, err := io.ReadAll(res.Body)
 			err = json.Unmarshal(body, &job) // TODO: Error Handling
 			if err != nil {
+				fmt.Printf("\nERROR = %s", err.Error())
 				log.Errorw("[ ERR ] Problem unmarshalling JSON response", "msg", err)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
@@ -376,17 +380,35 @@ func main() {
 			//output = strings.ReplaceAll(output, "__", "_")
 
 			// create the message if needed, or edit existing with the new content
-			if msg == nil {
-				msg, _ = bot.Send(tgUser, output)
-			} else {
-				bot.Edit(msg, output)
+			if msg == nil && output != "" {
+				msg, err = bot.Send(tgUser, output)
+				if err != nil {
+					fmt.Printf("\nnil message ERROR = %s", err.Error())
+					log.Errorw("[ ERR ] Problem sending message", "msg", err)
+					//return c.Send("Проблемы со связью, попробуйте еще раз...")
+					time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
+					//continue
+				}
+				fmt.Printf("\nnil message...")
+			} else if msg != nil {
+				fmt.Printf("\nbot.Edit...")
+				err = bot.Edit(msg, output)
+				if err != nil {
+					fmt.Printf("\nnil edit ERROR = %s", err.Error())
+					log.Errorw("[ ERR ] Problem editing message", "msg", err)
+					//return c.Send("Проблемы со связью, попробуйте еще раз...")
+					time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
+					//continue
+				}
 			}
 
 			// FIXME: We need MORE conditions to leave the loop
 			if job.Status == "finished" {
+				fmt.Printf("\njob.Status == finished...")
 				break
 			}
 
+			fmt.Printf("\nSleep...")
 			//fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
 			time.Sleep(300 * time.Millisecond)
 		}
@@ -395,6 +417,7 @@ func main() {
 		//return c.Send(string(job.Output))
 		//fmt.Printf("\n\nFINISHED")
 
+		fmt.Printf("\nFinished...")
 		log.Infow("[ MSG ] Message 100 percent finished")
 		//mu.Lock()
 		user.Status = "" // TODO: Enum all statuses and flow between them
