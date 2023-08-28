@@ -24,6 +24,7 @@ import (
 
 const VERSION = "0.13.0"
 
+// [ ] FIXME: Adapt TG version of Markdown for different models
 // [ ] FIXME: If the .env was changed and there no more the host, that was sticked to the user or session, dump the older host!
 // [ ] TODO: Detect wrong hosts on start? [ ERR ] HTTP POST: could not create request: parse "http://209.137.198.8 :15415/jobs": invalid character " " in host name
 // [ ] FIXME: Inspect on start - are there another instance still running?
@@ -230,9 +231,9 @@ func main() {
 	// -- Set up bot
 
 	pref := tele.Settings{
-		Token:     os.Getenv("TELEGRAM_TOKEN"),
-		Poller:    &tele.LongPoller{Timeout: 10 * time.Second},
-		ParseMode: "Markdown",
+		Token:  os.Getenv("TELEGRAM_TOKEN"),
+		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
+		//ParseMode: "Markdown",
 	}
 
 	bot, err := tele.NewBot(pref)
@@ -370,9 +371,9 @@ func main() {
 
 			// do some replacing to allow correct Telegram Markdown
 			output := job.Output
-			output = strings.ReplaceAll(output, "\n* ", "\n- ") // TODO: bullet? middle point?
-			output = strings.ReplaceAll(output, "**", "*")
-			output = strings.ReplaceAll(output, "__", "_")
+			//output = strings.ReplaceAll(output, "\n* ", "\n- ") // TODO: bullet? middle point?
+			//output = strings.ReplaceAll(output, "**", "*")
+			//output = strings.ReplaceAll(output, "__", "_")
 
 			// create the message if needed, or edit existing with the new content
 			if msg == nil {
