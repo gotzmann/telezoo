@@ -391,15 +391,20 @@ func main() {
 				}
 				fmt.Printf("\nnil message...")
 			} else if msg != nil {
+				// FIXME: Do not edit too often?
+				// ERROR = telegram: retry after 122 (429)
 				fmt.Printf("\nbot.Edit...")
-				err = bot.Edit(msg, output)
+				_, err := bot.Edit(msg, output)
 				if err != nil {
-					fmt.Printf("\nnil edit ERROR = %s", err.Error())
+					fmt.Printf("\nmsg edit ERROR = %s", err.Error())
 					log.Errorw("[ ERR ] Problem editing message", "msg", err)
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
 					//continue
 				}
+				//if msg2 != msg {
+				//	fmt.Printf("\nERROR msg1 != msg2 [ %+v ] [ %+v ]", msg, msg2)
+				//}
 			}
 
 			// FIXME: We need MORE conditions to leave the loop
@@ -408,9 +413,12 @@ func main() {
 				break
 			}
 
+			// FIXME: Do not edit too often?
+			// ERROR = telegram: retry after 122 (429)
+			// TODO: Correct sleep time depending on how often we request message editing to conform TG limits
 			fmt.Printf("\nSleep...")
 			//fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(2000 * time.Millisecond)
 		}
 
 		// TODO: Log finished message with time elapsed
