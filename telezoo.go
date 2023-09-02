@@ -24,6 +24,7 @@ import (
 
 const VERSION = "0.13.0"
 
+// [ ] FIXME: fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value
 // [ ] FIXME: Adapt TG version of Markdown for different models
 // [ ] FIXME: If the .env was changed and there no more the host, that was sticked to the user or session, dump the older host!
 // [ ] TODO: Detect wrong hosts on start? [ ERR ] HTTP POST: could not create request: parse "http://209.137.198.8 :15415/jobs": invalid character " " in host name
