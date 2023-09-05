@@ -24,7 +24,8 @@ import (
 
 const VERSION = "0.13.0"
 
-// [ ] FIXME: fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value
+// [ ] FIXME: fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value | BODY = Requested ID was not found!
+// [ ] FIXME: ^^^ fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value
 // [ ] FIXME: Adapt TG version of Markdown for different models
 // [ ] FIXME: If the .env was changed and there no more the host, that was sticked to the user or session, dump the older host!
 // [ ] TODO: Detect wrong hosts on start? [ ERR ] HTTP POST: could not create request: parse "http://209.137.198.8 :15415/jobs": invalid character " " in host name
@@ -349,6 +350,7 @@ func main() {
 		req.Header.Set("Content-Type", "application/json")
 
 		var job Job
+		var errorAttempts int
 		var msg *tele.Message
 		for {
 
@@ -359,7 +361,12 @@ func main() {
 				fmt.Printf("\nERROR = %s", err.Error())
 				log.Errorw("[ ERR ] Problem with HTTP request", "msg", err)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
-				time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
+				errorAttempts++
+				if errorAttempts > 8 {
+					user.Status = ""
+					return c.Send("Проблемы со связью, попробуйте еще раз...")
+				}
+				time.Sleep(2000 * time.Millisecond) // wait in case of problems
 				continue
 			}
 
@@ -368,9 +375,15 @@ func main() {
 			err = json.Unmarshal(body, &job) // TODO: Error Handling
 			if err != nil {
 				fmt.Printf("\nERROR = %s", err.Error())
+				fmt.Printf("\nBODY = %s", body)
 				log.Errorw("[ ERR ] Problem unmarshalling JSON response", "msg", err)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
-				time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
+				errorAttempts++
+				if errorAttempts > 8 {
+					user.Status = ""
+					return c.Send("Проблемы со связью, попробуйте еще раз...")
+				}
+				time.Sleep(2000 * time.Millisecond) // wait in case of problems
 				continue
 			}
 
@@ -387,7 +400,12 @@ func main() {
 					fmt.Printf("\nnil message ERROR = %s", err.Error())
 					log.Errorw("[ ERR ] Problem sending message", "msg", err)
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
-					time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
+					errorAttempts++
+					if errorAttempts > 8 {
+						user.Status = ""
+						return c.Send("Проблемы со связью, попробуйте еще раз...")
+					}
+					time.Sleep(2000 * time.Millisecond) // wait in case of problems
 					//continue
 				}
 				fmt.Printf("\nnil message...")
@@ -400,7 +418,12 @@ func main() {
 					fmt.Printf("\nmsg edit ERROR = %s", err.Error())
 					log.Errorw("[ ERR ] Problem editing message", "msg", err)
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
-					time.Sleep(1000 * time.Millisecond) // wait for 1 sec in case of problems
+					errorAttempts++
+					if errorAttempts > 8 {
+						user.Status = ""
+						return c.Send("Проблемы со связью, попробуйте еще раз...")
+					}
+					time.Sleep(2000 * time.Millisecond) // wait for 1 sec in case of problems
 					//continue
 				}
 				//if msg2 != msg {
