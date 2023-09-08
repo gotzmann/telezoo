@@ -358,8 +358,8 @@ func main() {
 			// FIXME: Better and robust handling with error checking and deadlines
 			res, err := fastHTTP.Do(req)
 			if err != nil {
-				fmt.Printf("\nERROR = %s", err.Error())
-				log.Errorw("[ ERR ] Problem with HTTP request", "msg", err)
+				//fmt.Printf("\nERROR = %s", err.Error())
+				log.Errorw("[ ERR ] Problem with HTTP request", "error", err.Error())
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				errorAttempts++
 				if errorAttempts > 8 {
@@ -370,13 +370,13 @@ func main() {
 				continue
 			}
 
-			fmt.Printf("\njson.Unmarshal...")
+			//fmt.Printf("\njson.Unmarshal...")
 			body, err := io.ReadAll(res.Body)
 			err = json.Unmarshal(body, &job) // TODO: Error Handling
 			if err != nil {
 				//fmt.Printf("\nERROR = %s", err.Error())
 				//fmt.Printf("\nBODY = %s", body)
-				log.Errorw("[ ERR ] Problem unmarshalling JSON response", "msg", err)
+				log.Errorw("[ ERR ] Problem unmarshalling JSON response", "error", err.Error(), "body", body)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				errorAttempts++
 				if errorAttempts > 8 {
@@ -398,7 +398,7 @@ func main() {
 				msg, err = bot.Send(tgUser, output)
 				if err != nil {
 					//fmt.Printf("\nnil message ERROR = %s", err.Error())
-					log.Errorw("[ ERR ] Problem sending message", "msg", err)
+					log.Errorw("[ ERR ] Problem sending message", "error", err.Error())
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					errorAttempts++
 					if errorAttempts > 8 {
@@ -408,15 +408,15 @@ func main() {
 					time.Sleep(2000 * time.Millisecond) // wait in case of problems
 					//continue
 				}
-				fmt.Printf("\nnil message...")
+				//fmt.Printf("\nnil message...")
 			} else if msg != nil {
 				// FIXME: Do not edit too often?
 				// ERROR = telegram: retry after 122 (429)
 				//fmt.Printf("\nbot.Edit...")
 				_, err := bot.Edit(msg, output)
 				if err != nil {
-					fmt.Printf("\nmsg edit ERROR = %s", err.Error())
-					log.Errorw("[ ERR ] Problem editing message", "msg", err)
+					//fmt.Printf("\nmsg edit ERROR = %s", err.Error())
+					log.Errorw("[ ERR ] Problem editing message", "error", err.Error())
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					errorAttempts++
 					if errorAttempts > 8 {
