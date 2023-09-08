@@ -22,7 +22,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.13.0"
+const VERSION = "0.14.0"
 
 // [ ] FIXME: fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value | BODY = Requested ID was not found!
 // [ ] FIXME: ^^^ fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value
@@ -354,7 +354,7 @@ func main() {
 		var msg *tele.Message
 		for {
 
-			fmt.Printf("\nfastHTTP.Do...")
+			//fmt.Printf("\nfastHTTP.Do...")
 			// FIXME: Better and robust handling with error checking and deadlines
 			res, err := fastHTTP.Do(req)
 			if err != nil {
@@ -374,8 +374,8 @@ func main() {
 			body, err := io.ReadAll(res.Body)
 			err = json.Unmarshal(body, &job) // TODO: Error Handling
 			if err != nil {
-				fmt.Printf("\nERROR = %s", err.Error())
-				fmt.Printf("\nBODY = %s", body)
+				//fmt.Printf("\nERROR = %s", err.Error())
+				//fmt.Printf("\nBODY = %s", body)
 				log.Errorw("[ ERR ] Problem unmarshalling JSON response", "msg", err)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				errorAttempts++
@@ -397,7 +397,7 @@ func main() {
 			if msg == nil && output != "" {
 				msg, err = bot.Send(tgUser, output)
 				if err != nil {
-					fmt.Printf("\nnil message ERROR = %s", err.Error())
+					//fmt.Printf("\nnil message ERROR = %s", err.Error())
 					log.Errorw("[ ERR ] Problem sending message", "msg", err)
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					errorAttempts++
@@ -412,7 +412,7 @@ func main() {
 			} else if msg != nil {
 				// FIXME: Do not edit too often?
 				// ERROR = telegram: retry after 122 (429)
-				fmt.Printf("\nbot.Edit...")
+				//fmt.Printf("\nbot.Edit...")
 				_, err := bot.Edit(msg, output)
 				if err != nil {
 					fmt.Printf("\nmsg edit ERROR = %s", err.Error())
@@ -433,14 +433,14 @@ func main() {
 
 			// FIXME: We need MORE conditions to leave the loop
 			if job.Status == "finished" {
-				fmt.Printf("\njob.Status == finished...")
+				//fmt.Printf("\njob.Status == finished...")
 				break
 			}
 
 			// FIXME: Do not edit too often?
 			// ERROR = telegram: retry after 122 (429)
 			// TODO: Correct sleep time depending on how often we request message editing to conform TG limits
-			fmt.Printf("\nSleep...")
+			//fmt.Printf("\nSleep...")
 			//fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
 			time.Sleep(2000 * time.Millisecond)
 		}
@@ -449,7 +449,7 @@ func main() {
 		//return c.Send(string(job.Output))
 		//fmt.Printf("\n\nFINISHED")
 
-		fmt.Printf("\nFinished...")
+		//fmt.Printf("\nFinished...")
 		log.Infow("[ MSG ] Message 100 percent finished")
 		//mu.Lock()
 		user.Status = "" // TODO: Enum all statuses and flow between them
