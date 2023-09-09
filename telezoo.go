@@ -22,7 +22,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.14.0"
+const VERSION = "0.15.0"
 
 // [ ] FIXME: fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value | BODY = Requested ID was not found!
 // [ ] FIXME: ^^^ fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value
@@ -58,10 +58,11 @@ var (
 )
 
 type Job struct {
-	ID     string `json: "id"`
-	Prompt string `json: "prompt"`
-	Output string `json: "output"`
-	Status string `json: "status"`
+	ID      string `json:"id"`
+	Prompt  string `json:"prompt"`
+	Session string `json:"session"`
+	Output  string `json:"output,omitempty"`
+	Status  string `json:"status,omitempty"`
 }
 
 type User struct {
@@ -275,12 +276,12 @@ func main() {
 			log.Infow("[ USER ] New user", "user", tgUser.ID)
 
 			user = &User{
-				ID:        "",
-				TGID:      tgUser.ID,
-				Mode:      "chat",
-				Server:    randomPod("chat"),
-				SessionID: uuid.New().String(),
-				Status:    "",
+				ID:     "",
+				TGID:   tgUser.ID,
+				Mode:   "chat",
+				Server: randomPod("chat"),
+				//SessionID: uuid.New().String(),
+				Status: "",
 			}
 
 			mu.Lock()
@@ -301,6 +302,9 @@ func main() {
 			mu.Lock()
 			if user.Status != "processing" {
 				user.Status = "processing"
+				if user.SessionID == "" {
+					user.SessionID = uuid.New().String()
+				}
 				allowProcessing = true
 			}
 			mu.Unlock()
@@ -311,17 +315,33 @@ func main() {
 			time.Sleep(300 * time.Millisecond)
 		}
 
-		// -- create JSON request body
 		id := uuid.New().String()
-		body := "{ \"id\": \"" + id + "\", \"session\": \"" + user.SessionID + "\", \"prompt\": \"" + prompt + "\" }"
-		bodyReader := bytes.NewReader([]byte(body))
+
+		job := Job{
+			ID:      id,
+			Prompt:  prompt,
+			Session: user.SessionID,
+		}
+
+		// -- create JSON request body
+		body, err := json.Marshal(job)
+		if err != nil {
+			user.Status = ""
+			log.Errorw("[ ERR ] Problem marshalling request", "id", id, "prompt", prompt)
+			return c.Send("Проблема с обработкой запроса, попробуйте убрать спецсимволы...")
+		}
+		//prompt = strings.Trim(string(safePrompt), `\"`)
+
+		//body := fmt.Sprintf(`{"id":"%s","session":"%s","prompt":"%s"}`, id, user.SessionID, prompt)
+		//bodyReader := bytes.NewReader([]byte(body))
+		bodyReader := bytes.NewReader(body)
 
 		// -- create HTTP request
 		url := user.Server + "/jobs"
 		req, err := http.NewRequest(http.MethodPost, url, bodyReader)
 		if err != nil {
 			user.Status = ""
-			log.Errorw("[ ERR ] Could not create HTTP request", "msg", err)
+			log.Errorw("[ ERR ] Could not create HTTP request", "id", id, "error", err.Error())
 			return c.Send("Не могу работать с этим запросом :(")
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -330,10 +350,26 @@ func main() {
 		res, err := slowHTTP.Do(req)
 		if err != nil {
 			user.Status = ""
-			log.Errorw("[ ERR ] Problem with HTTP request", "msg", err)
+			log.Errorw("[ ERR ] Problem with HTTP request", "id", id, "error", err.Error())
 			return c.Send("Проблемы со связью, попробуйте еще раз...")
 		}
 		defer res.Body.Close()
+
+		if res.StatusCode != 200 {
+			//fmt.Printf("\n[ ERR ] Wrong status code = %d", res.StatusCode)
+			log.Errorw("[ ERR ] Wrong status code while sending new job", "id", id, "code", res.StatusCode)
+
+			// Requested ID was not found!
+			// FIXME: Think again about right logic here
+			//if res.StatusCode == 404 {
+			//	user.Status = ""
+			//	user.SessionID = "" // NB! Session will be created with a new request
+			//	return c.Send("Неожиданная ошибка, попробуйте еще раз...")
+			//}
+
+			//time.Sleep(2000 * time.Millisecond) // wait in case of problems
+			//continue
+		}
 
 		// wait for 1 sec to provide GPU with some time to start doing the task
 		time.Sleep(1000 * time.Millisecond)
@@ -343,13 +379,13 @@ func main() {
 		// There should not be an errors at all, so just log it and return nothing
 		if err != nil {
 			user.Status = ""
-			log.Errorw("[ ERR ] Unexpected problem while creating HTTP request", "msg", err)
+			log.Errorw("[ ERR ] Unexpected problem while creating HTTP request", "id", id, "error", err.Error())
 			//return c.Send("Неожиданная проблема на сервере :(")
 			return nil
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		var job Job
+		//var job Job
 		var errorAttempts int
 		var msg *tele.Message
 		for {
@@ -359,7 +395,7 @@ func main() {
 			res, err := fastHTTP.Do(req)
 			if err != nil {
 				//fmt.Printf("\nERROR = %s", err.Error())
-				log.Errorw("[ ERR ] Problem with HTTP request", "error", err.Error())
+				log.Errorw("[ ERR ] Problem with HTTP request", "id", id, "error", err.Error())
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				errorAttempts++
 				if errorAttempts > 8 {
@@ -370,13 +406,29 @@ func main() {
 				continue
 			}
 
+			if res.StatusCode != 200 {
+				//fmt.Printf("\n[ ERR ] Wrong status code = %d", res.StatusCode)
+				log.Errorw("[ ERR ] Wrong status code", "id", id, "code", res.StatusCode)
+
+				// Requested ID was not found!
+				// FIXME: Think again about right logic here
+				if res.StatusCode == 404 {
+					user.Status = ""
+					user.SessionID = "" // NB! Session will be created with a new request
+					return c.Send("Неожиданная ошибка, попробуйте еще раз...")
+				}
+
+				time.Sleep(2000 * time.Millisecond) // wait in case of problems
+				continue
+			}
+
 			//fmt.Printf("\njson.Unmarshal...")
 			body, err := io.ReadAll(res.Body)
 			err = json.Unmarshal(body, &job) // TODO: Error Handling
 			if err != nil {
 				//fmt.Printf("\nERROR = %s", err.Error())
 				//fmt.Printf("\nBODY = %s", body)
-				log.Errorw("[ ERR ] Problem unmarshalling JSON response", "error", err.Error(), "body", body)
+				log.Errorw("[ ERR ] Problem unmarshalling JSON response", "id", id, "error", err.Error(), "body", body)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				errorAttempts++
 				if errorAttempts > 8 {
@@ -398,7 +450,7 @@ func main() {
 				msg, err = bot.Send(tgUser, output)
 				if err != nil {
 					//fmt.Printf("\nnil message ERROR = %s", err.Error())
-					log.Errorw("[ ERR ] Problem sending message", "error", err.Error())
+					log.Errorw("[ ERR ] Problem sending message", "id", id, "error", err.Error())
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					errorAttempts++
 					if errorAttempts > 8 {
@@ -416,7 +468,7 @@ func main() {
 				_, err := bot.Edit(msg, output)
 				if err != nil {
 					//fmt.Printf("\nmsg edit ERROR = %s", err.Error())
-					log.Errorw("[ ERR ] Problem editing message", "error", err.Error())
+					log.Errorw("[ ERR ] Problem editing message", "id", id, "error", err.Error())
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					errorAttempts++
 					if errorAttempts > 8 {
@@ -450,7 +502,7 @@ func main() {
 		//fmt.Printf("\n\nFINISHED")
 
 		//fmt.Printf("\nFinished...")
-		log.Infow("[ MSG ] Message 100 percent finished")
+		log.Infow("[ MSG ] Message complete", "id", id)
 		//mu.Lock()
 		user.Status = "" // TODO: Enum all statuses and flow between them
 		//mu.Unlock()
@@ -509,7 +561,7 @@ func main() {
 
 		user.Mode = "pro"
 		user.Server = randomPod(user.Mode)
-		user.SessionID = uuid.New().String()
+		//user.SessionID = uuid.New().String()
 
 		log.Infow("[ USER ] Switched to PRO plan", "user", tgUser.ID)
 		return c.Send("Включаю полную мощность...")
@@ -530,7 +582,7 @@ func main() {
 
 		user.Mode = "chat"
 		user.Server = randomPod(user.Mode)
-		user.SessionID = uuid.New().String()
+		//user.SessionID = uuid.New().String()
 
 		log.Infow("[ USER ] Switched to CHAT mode", "user", tgUser.ID)
 		return c.Send("Переключаюсь в режим чата...")
