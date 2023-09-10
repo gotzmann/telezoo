@@ -24,8 +24,9 @@ import (
 
 const VERSION = "0.15.0"
 
-// [ ] FIXME: fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value | BODY = Requested ID was not found!
-// [ ] FIXME: ^^^ fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value
+// [ ] TODO: Do not save empty users and duplicates into users.db
+// [*] FIXME: fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value | BODY = Requested ID was not found!
+// [*] FIXME: ^^^ fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value
 // [ ] FIXME: Adapt TG version of Markdown for different models
 // [ ] FIXME: If the .env was changed and there no more the host, that was sticked to the user or session, dump the older host!
 // [ ] TODO: Detect wrong hosts on start? [ ERR ] HTTP POST: could not create request: parse "http://209.137.198.8 :15415/jobs": invalid character " " in host name
@@ -34,12 +35,12 @@ const VERSION = "0.15.0"
 // [*] TODO: Save user IDs into disk storage, SQLite vs json.Marshal?
 // [ ] TODO: Send an empty message (rotated icon???) even before trying to call GPU?
 // [ ] TODO: Paste eye catching picture inside Hello Message
-// [ ] TODO: Find great 13B / 30B LLaMA model for CHAT mode
+// [-] TODO: Find great 13B / 30B LLaMA model for CHAT mode
 // [*] TODO: Proper logging
 // [*] TODO: Start dialog with short instructions on how to use chat commands
 // [*] TODO: Handle SIGINT
 // [*] TODO: Do graceful shutdown releasing all dialogs
-// [ ] TODO: Proper deadlines and retries for HTTP calls
+// [*] TODO: Proper deadlines and retries for HTTP calls
 // [*] TODO: Do not os.Exit() or log.Fatal or panic!
 // [*] TODO: Balancer between instances
 // [*] TODO: Sticky sessions within instances
@@ -199,7 +200,7 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// --- Do all we need in case of graceful shutdown or unexpected panic
+	// --- Finish what needed in case of graceful shutdown or unexpected panic
 
 	defer func() {
 		signal.Stop(signalChan)
@@ -215,7 +216,7 @@ func main() {
 		logger.Sync()
 	}()
 
-	// -- Read existing users from local DB [ ugly draft for faster development ]
+	// -- Read existing users from local DB [ so-so draft for faster development ]
 
 	db, err := os.OpenFile("telezoo.db", os.O_RDONLY, 0644)
 	scanner := bufio.NewScanner(db)
@@ -224,7 +225,10 @@ func main() {
 		userJSON := scanner.Text()
 		user := &User{}
 		json.Unmarshal([]byte(userJSON), &user)
-		user.Status = "" // reset the status, but loose last processing messages
+		if user.TGID == 0 {
+			continue
+		}
+		user.Status = "" // reset the status, but maybe lose some messages were been processing
 		// TODO: Implement correct procedure to respawn dead servers
 		users[user.TGID] = user
 	}
@@ -502,7 +506,7 @@ func main() {
 		//fmt.Printf("\n\nFINISHED")
 
 		//fmt.Printf("\nFinished...")
-		log.Infow("[ MSG ] Message complete", "id", id)
+		log.Infow("[ MSG ] Message finished", "id", id)
 		//mu.Lock()
 		user.Status = "" // TODO: Enum all statuses and flow between them
 		//mu.Unlock()
