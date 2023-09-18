@@ -22,7 +22,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.15.0"
+const VERSION = "0.16.0"
 
 // [ ] TODO: Do not save empty users and duplicates into users.db
 // [*] FIXME: fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value | BODY = Requested ID was not found!
@@ -94,10 +94,11 @@ var (
 		"Могу поддержать разговор на любую тему, просто напиши.\n\n" +
 		"Если потребуется что-то посерьезнее, переключи меня в режим PRO - ведь это бесплатно.\n\n" +
 		"Рекомендую запомнить эти команды:\n\n" +
-		"/new - начать новый диалог [ забыть прошлое ]\n" +
-		"/chat - пообщаться о жизни [ отвечает быстро ]\n" +
-		"/pro - включить интеллект [ будет медленно ]\n"
+		"/new - начать новый диалог [ забыть прошлое ]\n"
 )
+
+// "/chat - пообщаться о жизни [ отвечает быстро ]\n" +
+// "/pro - включить интеллект [ будет медленно ]\n"
 
 func init() {
 	users = make(map[int64]*User)
