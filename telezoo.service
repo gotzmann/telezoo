@@ -1,0 +1,33 @@
+# telezoo as daemon
+
+# -- 1. Copy telezoo executable and .env to /home
+
+# -- 2. Create telezoo.log and telezoo.db, grant 666
+
+# -- 3. Place this file to /etc/systemd/system, then execute commands
+
+# sudo systemctl daemon-reload && sudo systemctl enable telezoo
+
+# -- 4. Check /var/log/syslog for errors
+
+# -- 5. Use these commands for service control
+
+# sudo systemctl start telezoo
+# sudo systemctl stop telezoo
+
+[Unit]
+
+Description=telezoo
+
+[Service]
+
+PIDFile=/var/run/telezoo.pid
+WorkingDirectory=/home
+ExecStart=/home/telezoo >/dev/null 2>&1 &
+# Send a termination signal to the service. SIGTERM (15) is the default:
+ExecStop=systemctl kill telezoo >/dev/null 2>&1 &
+
+[Install]
+
+WantedBy=multi-user.target
+Alias=telezoo
