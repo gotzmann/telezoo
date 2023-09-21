@@ -24,6 +24,9 @@ import (
 
 const VERSION = "0.16.0"
 
+// [ ] TODO: Eliminate dead hosts from users DB (replace with some live random) on service restart
+// [ ] TODO: Verify .etc hosts agains regexp
+// [ ] TODO: USER => Store creation date
 // [ ] TODO: Do not save empty users and duplicates into users.db
 // [*] FIXME: fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value | BODY = Requested ID was not found!
 // [*] FIXME: ^^^ fastHTTP.Do... => json.Unmarshal... => ERROR = invalid character 'R' looking for beginning of value
