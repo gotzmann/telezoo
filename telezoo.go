@@ -568,7 +568,7 @@ func main() {
 
 		user.Mode = "pro"
 		user.Server = randomPod(user.Mode)
-		//user.SessionID = uuid.New().String()
+		user.SessionID = uuid.New().String()
 
 		log.Infow("[ USER ] Switched to PRO plan", "user", tgUser.ID)
 		return c.Send("Включаю полную мощность...")
@@ -589,7 +589,7 @@ func main() {
 
 		user.Mode = "chat"
 		user.Server = randomPod(user.Mode)
-		//user.SessionID = uuid.New().String()
+		user.SessionID = uuid.New().String()
 
 		log.Infow("[ USER ] Switched to CHAT mode", "user", tgUser.ID)
 		return c.Send("Переключаюсь в режим чата...")
