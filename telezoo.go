@@ -22,9 +22,8 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.16.0"
+const VERSION = "0.17.0"
 
-// [ ] TODO: Eliminate dead hosts from users DB (replace with some live random) on service restart
 // [ ] TODO: Verify .etc hosts agains regexp
 // [ ] TODO: USER => Store creation date
 // [ ] TODO: Do not save empty users and duplicates into users.db
@@ -189,7 +188,7 @@ func main() {
 			// TODO: Backup an older file before rewrite?
 			db, err := os.OpenFile("telezoo.db", os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				log.Info("[ERR] Cant dump users into file DB")
+				log.Info("[ERR] Can't dump users to DB file")
 			} else {
 				for _, user := range users {
 					userJSON, _ := json.Marshal(*user)
@@ -219,7 +218,30 @@ func main() {
 		logger.Sync()
 	}()
 
-	// -- Read existing users from local DB [ so-so draft for faster development ]
+	// -- Helpers
+
+	randomPod := func(mode string) string {
+		max := len(zoo[mode])
+		pod := rand.Intn(max)
+		for pod == max {
+			pod = rand.Intn(max)
+		}
+		return zoo[mode][pod]
+	}
+
+	isPodActive := func(mode, pod string) bool {
+		// TODO: Allow to switch for default mode when user mode is not supported
+		//for _, mode := range []string{"chat", "pro"} {
+		for _, envPod := range zoo[mode] {
+			if pod == envPod {
+				return true
+			}
+		}
+		//}
+		return false
+	}
+
+	// -- Load users from DB [ draft version using local file for faster development ]
 
 	db, err := os.OpenFile("telezoo.db", os.O_RDONLY, 0644)
 	scanner := bufio.NewScanner(db)
@@ -227,12 +249,20 @@ func main() {
 	for scanner.Scan() {
 		userJSON := scanner.Text()
 		user := &User{}
-		json.Unmarshal([]byte(userJSON), &user)
-		if user.TGID == 0 {
+		err := json.Unmarshal([]byte(userJSON), &user)
+		if err != nil || user.TGID == 0 {
 			continue
 		}
-		user.Status = "" // reset the status, but maybe lose some messages were been processing
-		// TODO: Implement correct procedure to respawn dead servers
+		// FIXME: Trying to reload status as is
+		// user.Status = "" // reset the status, but maybe lose some messages were been processing
+
+		// Respawn dead servers
+		if !isPodActive(user.Mode, user.Server) {
+			user.Server = randomPod(user.Mode)
+			user.SessionID = uuid.New().String()
+			user.Status = ""
+		}
+
 		users[user.TGID] = user
 	}
 
@@ -250,15 +280,6 @@ func main() {
 	if err != nil {
 		log.Fatal("[ ERR ] Cant create TG bot instance")
 		os.Exit(0)
-	}
-
-	randomPod := func(mode string) string {
-		max := len(zoo[mode])
-		pod := rand.Intn(max)
-		for pod == max {
-			pod = rand.Intn(max)
-		}
-		return zoo[mode][pod]
 	}
 
 	// -- Handle user messages [ that weren't captured by other handlers ]
@@ -283,12 +304,12 @@ func main() {
 			log.Infow("[ USER ] New user", "user", tgUser.ID)
 
 			user = &User{
-				ID:     "",
-				TGID:   tgUser.ID,
-				Mode:   "chat",
-				Server: randomPod("chat"),
-				//SessionID: uuid.New().String(),
-				Status: "",
+				ID:        "",
+				TGID:      tgUser.ID,
+				Mode:      "chat",
+				Server:    randomPod("chat"),
+				SessionID: uuid.New().String(),
+				Status:    "",
 			}
 
 			mu.Lock()
