@@ -22,7 +22,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.17.0"
+const VERSION = "0.18.0"
 
 // [ ] TODO: Verify .etc hosts agains regexp
 // [ ] TODO: USER => Store creation date
@@ -93,12 +93,22 @@ var (
 
 	helloMessage = "Привет! Я Мира. Похоже на первое знакомство :)\n\n" +
 		"Сразу поясню - я понимаю разные языки, в том числе русский и английский. " +
-		"Могу поддержать разговор на любую тему, просто напиши.\n\n" +
+		"Могу поддержать разговор на любую тему, просто пиши в чат.\n\n" +
 		//"Если потребуется что-то посерьезнее, переключи меня в режим PRO - ведь это бесплатно.\n\n" +
 		"Рекомендую запомнить эти команды:\n\n" +
-		"/new - начать новый диалог [ забыть прошлое ]\n"
+		"/new - начать новый диалог [ забыть историю ]\n"
 	// "/chat - пообщаться о жизни [ отвечает быстро ]\n" +
 	// "/pro - включить интеллект [ будет медленно ]\n"
+
+	startMessage = "Старт новой сессии..." //+
+	//	"Сразу поясню - я понимаю разные языки, в том числе русский и английский. " +
+	//	"Могу поддержать разговор на любую тему, просто пиши в чат.\n\n" +
+	//"Если потребуется что-то посерьезнее, переключи меня в режим PRO - ведь это бесплатно.\n\n" +
+	//	"Рекомендую запомнить эти команды:\n\n" +
+	//	"/new - начать новый диалог [ забыть прошлое ]\n"
+	// "/chat - пообщаться о жизни [ отвечает быстро ]\n" +
+	// "/pro - включить интеллект [ будет медленно ]\n"
+
 )
 
 func init() {
@@ -572,6 +582,27 @@ func main() {
 
 		log.Infow("[ USER ] New session", "user", tgUser.ID)
 		return c.Send("Начинаю новую сессию...")
+	})
+
+	// -- Reset settings
+
+	bot.Handle("/start", func(c tele.Context) error {
+		tgUser := c.Sender()
+
+		mu.Lock()
+		user, found := users[tgUser.ID]
+		mu.Unlock()
+
+		if !found {
+			return nil // FIXME: Is it possible?
+		}
+
+		user.Mode = "chat"
+		user.Server = randomPod(user.Mode)
+		user.SessionID = uuid.New().String()
+
+		log.Infow("[ USER ] Start with /start command", "user", tgUser.ID)
+		return c.Send(helloMessage)
 	})
 
 	// -- Switch into the PRO mode
