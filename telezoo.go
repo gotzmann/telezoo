@@ -22,7 +22,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.18.0"
+const VERSION = "0.30.0"
 
 // [ ] TODO: Verify .etc hosts agains regexp
 // [ ] TODO: USER => Store creation date
@@ -73,8 +73,9 @@ type User struct {
 	TGID      int64  `json:"tgid,omitempty"`    // User ID within Telegram
 	Mode      string `json:"mode,omitempty"`    // pro / chat
 	SessionID string `json:"session,omitempty"` // current session
-	Status    string `json:"status,omitempty"`  // processing status
-	Server    string `json:"server,omitempty"`  // Server address for sticky sessions
+	// NB! Do not serialize status into DB before server do not start right for users with "processing" tasks
+	Status string `json:"status,omitempty"` // processing status
+	Server string `json:"server,omitempty"` // Server address for sticky sessions
 }
 
 type Session struct {
@@ -228,29 +229,6 @@ func main() {
 		logger.Sync()
 	}()
 
-	// -- Helpers
-
-	randomPod := func(mode string) string {
-		max := len(zoo[mode])
-		pod := rand.Intn(max)
-		for pod == max {
-			pod = rand.Intn(max)
-		}
-		return zoo[mode][pod]
-	}
-
-	isPodActive := func(mode, pod string) bool {
-		// TODO: Allow to switch for default mode when user mode is not supported
-		//for _, mode := range []string{"chat", "pro"} {
-		for _, envPod := range zoo[mode] {
-			if pod == envPod {
-				return true
-			}
-		}
-		//}
-		return false
-	}
-
 	// -- Load users from DB [ draft version using local file for faster development ]
 
 	db, err := os.OpenFile("telezoo.db", os.O_RDONLY, 0644)
@@ -264,7 +242,7 @@ func main() {
 			continue
 		}
 		// FIXME: Trying to reload status as is
-		// user.Status = "" // reset the status, but maybe lose some messages were been processing
+		user.Status = "" // reset the status, but maybe lose some messages were been processing
 
 		// Respawn dead servers
 		if !isPodActive(user.Mode, user.Server) {
@@ -281,9 +259,9 @@ func main() {
 	// -- Set up bot
 
 	pref := tele.Settings{
-		Token:  os.Getenv("TELEGRAM_TOKEN"),
-		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
-		//ParseMode: "Markdown",
+		Token:     os.Getenv("TELEGRAM_TOKEN"),
+		Poller:    &tele.LongPoller{Timeout: 10 * time.Second},
+		ParseMode: "Markdown", // NB!
 	}
 
 	bot, err := tele.NewBot(pref)
@@ -409,8 +387,8 @@ func main() {
 			//continue
 		}
 
-		// wait for 1 sec to provide GPU with some time to start doing the task
-		time.Sleep(1000 * time.Millisecond)
+		// wait for 3 sec to provide GPU with some time to start doing the task
+		time.Sleep(3000 * time.Millisecond)
 
 		url = user.Server + "/jobs/" + id
 		req, err = http.NewRequest(http.MethodGet, url, nil)
@@ -436,11 +414,11 @@ func main() {
 				log.Errorw("[ ERR ] Problem with HTTP request", "id", id, "error", err.Error())
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				errorAttempts++
-				if errorAttempts > 8 {
+				if errorAttempts > 10 {
 					user.Status = ""
 					return c.Send("Проблемы со связью, попробуйте еще раз...")
 				}
-				time.Sleep(2000 * time.Millisecond) // wait in case of problems
+				time.Sleep(3000 * time.Millisecond) // wait in case of problems
 				continue
 			}
 
@@ -456,7 +434,7 @@ func main() {
 					return c.Send("Неожиданная ошибка, попробуйте еще раз...")
 				}
 
-				time.Sleep(2000 * time.Millisecond) // wait in case of problems
+				time.Sleep(3000 * time.Millisecond) // wait in case of problems
 				continue
 			}
 
@@ -473,15 +451,37 @@ func main() {
 					user.Status = ""
 					return c.Send("Проблемы со связью, попробуйте еще раз...")
 				}
-				time.Sleep(2000 * time.Millisecond) // wait in case of problems
+				time.Sleep(3000 * time.Millisecond) // wait in case of problems
 				continue
 			}
 
 			// do some replacing to allow correct Telegram Markdown
-			output := job.Output
+			// output := job.Output
 			//output = strings.ReplaceAll(output, "\n* ", "\n- ") // TODO: bullet? middle point?
 			//output = strings.ReplaceAll(output, "**", "*")
 			//output = strings.ReplaceAll(output, "__", "_")
+
+			output := ""
+			prev := ""
+			for _, rune := range job.Output + " " {
+				switch {
+				case prev == "**" && rune != '*':
+					output += "*"
+					prev = ""
+				case prev == "*" && rune != '*':
+					output += "\\*"
+					prev = ""
+				case rune == '*':
+					prev += "*"
+					continue
+				case len(prev) > 0:
+					output += strings.ReplaceAll(prev, "*", "\\*")
+					prev = ""
+				}
+				output += string(rune)
+			}
+			output = strings.Trim(output, " ")
+			fmt.Printf("\n\nOUTPUT = %s", output)
 
 			// create the message if needed, or edit existing with the new content
 			if msg == nil && output != "" {
@@ -491,11 +491,11 @@ func main() {
 					log.Errorw("[ ERR ] Problem sending message", "id", id, "error", err.Error())
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					errorAttempts++
-					if errorAttempts > 8 {
+					if errorAttempts > 10 {
 						user.Status = ""
 						return c.Send("Проблемы со связью, попробуйте еще раз...")
 					}
-					time.Sleep(2000 * time.Millisecond) // wait in case of problems
+					time.Sleep(3000 * time.Millisecond) // wait in case of problems
 					//continue
 				}
 				//fmt.Printf("\nnil message...")
@@ -509,11 +509,11 @@ func main() {
 					log.Errorw("[ ERR ] Problem editing message", "id", id, "error", err.Error())
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					errorAttempts++
-					if errorAttempts > 8 {
+					if errorAttempts > 10 {
 						user.Status = ""
 						return c.Send("Проблемы со связью, попробуйте еще раз...")
 					}
-					time.Sleep(2000 * time.Millisecond) // wait for 1 sec in case of problems
+					time.Sleep(3000 * time.Millisecond) // wait for 1 sec in case of problems
 					//continue
 				}
 				//if msg2 != msg {
@@ -532,7 +532,7 @@ func main() {
 			// TODO: Correct sleep time depending on how often we request message editing to conform TG limits
 			//fmt.Printf("\nSleep...")
 			//fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
-			time.Sleep(2000 * time.Millisecond)
+			time.Sleep(3000 * time.Millisecond)
 		}
 
 		// TODO: Log finished message with time elapsed
@@ -564,90 +564,143 @@ func main() {
 		})
 	*/
 
-	// -- Start new session
-
-	bot.Handle("/new", func(c tele.Context) error {
-		tgUser := c.Sender()
-
-		mu.Lock()
-		user, found := users[tgUser.ID]
-		mu.Unlock()
-
-		if !found {
-			return nil // FIXME: Is it possible?
-		}
-
-		user.Server = randomPod(user.Mode)
-		user.SessionID = uuid.New().String()
-
-		log.Infow("[ USER ] New session", "user", tgUser.ID)
-		return c.Send("Начинаю новую сессию...")
-	})
-
 	// -- Reset settings
 
-	bot.Handle("/start", func(c tele.Context) error {
-		tgUser := c.Sender()
+	bot.Handle("/start", func(ctx tele.Context) error {
+		return start(ctx)
+	})
 
-		mu.Lock()
-		user, found := users[tgUser.ID]
-		mu.Unlock()
+	// -- Start new session
 
-		if !found {
-			return nil // FIXME: Is it possible?
-		}
-
-		user.Mode = "chat"
-		user.Server = randomPod(user.Mode)
-		user.SessionID = uuid.New().String()
-
-		log.Infow("[ USER ] Start with /start command", "user", tgUser.ID)
-		return c.Send(helloMessage)
+	bot.Handle("/new", func(ctx tele.Context) error {
+		return new(ctx)
+	})
+	bot.Handle("/туц", func(ctx tele.Context) error {
+		return new(ctx)
+	})
+	bot.Handle("\\new", func(ctx tele.Context) error {
+		return new(ctx)
 	})
 
 	// -- Switch into the PRO mode
 
-	bot.Handle("/pro", func(c tele.Context) error {
-		tgUser := c.Sender()
-
-		mu.Lock()
-		user, found := users[tgUser.ID]
-		mu.Unlock()
-
-		if !found {
-			return nil // FIXME: Is it possible?
-		}
-
-		user.Mode = "pro"
-		user.Server = randomPod(user.Mode)
-		user.SessionID = uuid.New().String()
-
-		log.Infow("[ USER ] Switched to PRO plan", "user", tgUser.ID)
-		return c.Send("Включаю полную мощность...")
+	bot.Handle("/pro", func(ctx tele.Context) error {
+		return pro(ctx)
 	})
 
 	// -- Switch into the CHAT mode
 
-	bot.Handle("/chat", func(c tele.Context) error {
-		tgUser := c.Sender()
-
-		mu.Lock()
-		user, found := users[tgUser.ID]
-		mu.Unlock()
-
-		if !found {
-			return nil // FIXME: Is it possible?
-		}
-
-		user.Mode = "chat"
-		user.Server = randomPod(user.Mode)
-		user.SessionID = uuid.New().String()
-
-		log.Infow("[ USER ] Switched to CHAT mode", "user", tgUser.ID)
-		return c.Send("Переключаюсь в режим чата...")
+	bot.Handle("/chat", func(ctx tele.Context) error {
+		return chat(ctx)
 	})
 
 	fmt.Printf("\n[ START ] Starting interchange with Telegram...")
 	log.Info("[ START ] Start TG interchange...")
 	bot.Start()
+}
+
+// -- start
+
+func start(c tele.Context) error {
+	tgUser := c.Sender()
+
+	mu.Lock()
+	user, found := users[tgUser.ID]
+	mu.Unlock()
+
+	if !found {
+		return nil // FIXME: Is it possible?
+	}
+
+	user.Mode = "chat"
+	user.Server = randomPod(user.Mode)
+	user.SessionID = uuid.New().String()
+
+	log.Infow("[ USER ] Start with /start command", "user", tgUser.ID)
+	return c.Send(helloMessage)
+}
+
+// -- new
+
+func new(c tele.Context) error {
+	tgUser := c.Sender()
+
+	mu.Lock()
+	user, found := users[tgUser.ID]
+	mu.Unlock()
+
+	if !found {
+		return nil // FIXME: Is it possible?
+	}
+
+	user.Server = randomPod(user.Mode)
+	user.SessionID = uuid.New().String()
+
+	log.Infow("[ USER ] New session", "user", tgUser.ID)
+	return c.Send("Начинаю новую сессию...")
+}
+
+// -- pro
+
+func pro(c tele.Context) error {
+	tgUser := c.Sender()
+
+	mu.Lock()
+	user, found := users[tgUser.ID]
+	mu.Unlock()
+
+	if !found {
+		return nil // FIXME: Is it possible?
+	}
+
+	user.Mode = "pro"
+	user.Server = randomPod(user.Mode)
+	user.SessionID = uuid.New().String()
+
+	log.Infow("[ USER ] Switched to PRO plan", "user", tgUser.ID)
+	return c.Send("Включаю полную мощность...")
+}
+
+// -- chat
+
+func chat(c tele.Context) error {
+	tgUser := c.Sender()
+
+	mu.Lock()
+	user, found := users[tgUser.ID]
+	mu.Unlock()
+
+	if !found {
+		return nil // FIXME: Is it possible?
+	}
+
+	user.Mode = "chat"
+	user.Server = randomPod(user.Mode)
+	user.SessionID = uuid.New().String()
+
+	log.Infow("[ USER ] Switched to CHAT mode", "user", tgUser.ID)
+	return c.Send("Переключаюсь в режим чата...")
+}
+
+// -- Helpers
+
+func randomPod(mode string) string {
+	max := len(zoo[mode])
+	pod := rand.Intn(max)
+	for pod == max {
+		pod = rand.Intn(max)
+	}
+	return zoo[mode][pod]
+}
+
+func isPodActive(mode, pod string) bool {
+	// TODO: Allow to switch for default mode when user mode is not supported
+	//for _, mode := range []string{"chat", "pro"} {
+	for _, envPod := range zoo[mode] {
+		if pod == envPod {
+			return true
+		}
+	}
+	//}
+	return false
 }
