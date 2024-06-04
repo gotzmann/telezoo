@@ -469,19 +469,25 @@ func main() {
 					output += "*"
 					prev = ""
 				case prev == "*" && rune != '*':
-					output += "\\*"
+					output += string("\\*")
 					prev = ""
 				case rune == '*':
 					prev += "*"
 					continue
-				case len(prev) > 0:
+				case rune != '*' && len(prev) > 0:
 					output += strings.ReplaceAll(prev, "*", "\\*")
 					prev = ""
+				case rune == '[':
+					output += string("\\[")
+					continue
+					//case rune == ']':
+					//	output += string("\\]")
+					//	continue
 				}
 				output += string(rune)
 			}
 			output = strings.Trim(output, " ")
-			fmt.Printf("\n\nOUTPUT = %s", output)
+			//fmt.Printf("\n\nOUTPUT = %s", output)
 
 			// create the message if needed, or edit existing with the new content
 			if msg == nil && output != "" {
