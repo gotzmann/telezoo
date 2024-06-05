@@ -22,7 +22,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
-const VERSION = "0.30.0"
+const VERSION = "0.32.0"
 
 // [ ] TODO: Verify .etc hosts agains regexp
 // [ ] TODO: USER => Store creation date
@@ -277,6 +277,7 @@ func main() {
 		prompt := c.Text()
 
 		log.Infow("[ MSG ] New message", "user", tgUser.ID, "prompt", prompt)
+		fmt.Printf("\n[ MSG ] New message: %s", prompt)
 
 		// allow more time for important requests and less for those which might be ignored
 		slowHTTP := http.Client{Timeout: 10 * time.Second}
@@ -327,7 +328,7 @@ func main() {
 			if allowProcessing {
 				break
 			}
-			//fmt.Printf(" [ WAIT-FOR-GPU-SLOT ] ") // DEBUG
+			fmt.Printf(" [ WAIT-FOR-GPU-SLOT ] ") // DEBUG
 			time.Sleep(300 * time.Millisecond)
 		}
 
@@ -371,9 +372,12 @@ func main() {
 		}
 		defer res.Body.Close()
 
+		fmt.Printf("\n[ NET ] Req was sent") // DEBUG
+
 		if res.StatusCode != 200 {
-			//fmt.Printf("\n[ ERR ] Wrong status code = %d", res.StatusCode)
+			fmt.Printf("\n[ ERR ] Wrong status code = %d", res.StatusCode) // DEBUG
 			log.Errorw("[ ERR ] Wrong status code while sending new job", "id", id, "code", res.StatusCode)
+			fmt.Printf("[ ERR ] Wrong status code while sending new job : %d", res.StatusCode) // DEBUG
 
 			// Requested ID was not found!
 			// FIXME: Think again about right logic here
@@ -410,7 +414,7 @@ func main() {
 			// FIXME: Better and robust handling with error checking and deadlines
 			res, err := fastHTTP.Do(req)
 			if err != nil {
-				//fmt.Printf("\nERROR = %s", err.Error())
+				fmt.Printf("\nERROR = %s", err.Error()) // DEBUG
 				log.Errorw("[ ERR ] Problem with HTTP request", "id", id, "error", err.Error())
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				errorAttempts++
@@ -422,8 +426,10 @@ func main() {
 				continue
 			}
 
+			fmt.Printf("\n[ NET ] Req was sent") // DEBUG
+
 			if res.StatusCode != 200 {
-				//fmt.Printf("\n[ ERR ] Wrong status code = %d", res.StatusCode)
+				fmt.Printf("\n[ ERR ] Wrong status code = %d", res.StatusCode) // DEBUG
 				log.Errorw("[ ERR ] Wrong status code", "id", id, "code", res.StatusCode)
 
 				// Requested ID was not found!
@@ -442,8 +448,8 @@ func main() {
 			body, err := io.ReadAll(res.Body)
 			err = json.Unmarshal(body, &job) // TODO: Error Handling
 			if err != nil {
-				//fmt.Printf("\nERROR = %s", err.Error())
-				//fmt.Printf("\nBODY = %s", body)
+				fmt.Printf("\nERROR = %s", err.Error())
+				fmt.Printf("\nBODY = %s", body) // DEBUG
 				log.Errorw("[ ERR ] Problem unmarshalling JSON response", "id", id, "error", err.Error(), "body", body)
 				//return c.Send("Проблемы со связью, попробуйте еще раз...")
 				errorAttempts++
@@ -487,13 +493,13 @@ func main() {
 				output += string(rune)
 			}
 			output = strings.Trim(output, " ")
-			//fmt.Printf("\n\nOUTPUT = %s", output)
+			fmt.Printf("\n\nOUTPUT = %s", output)
 
 			// create the message if needed, or edit existing with the new content
 			if msg == nil && output != "" {
 				msg, err = bot.Send(tgUser, output)
 				if err != nil {
-					//fmt.Printf("\nnil message ERROR = %s", err.Error())
+					fmt.Printf("\n[ ERR ] nil message ERROR = %s", err.Error())
 					log.Errorw("[ ERR ] Problem sending message", "id", id, "error", err.Error())
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					errorAttempts++
@@ -508,7 +514,7 @@ func main() {
 			} else if msg != nil {
 				// FIXME: Do not edit too often?
 				// ERROR = telegram: retry after 122 (429)
-				//fmt.Printf("\nbot.Edit...")
+				fmt.Printf("\nbot.Edit...")
 				_, err := bot.Edit(msg, output)
 				if err != nil {
 					//fmt.Printf("\nmsg edit ERROR = %s", err.Error())
@@ -529,7 +535,7 @@ func main() {
 
 			// FIXME: We need MORE conditions to leave the loop
 			if job.Status == "finished" {
-				//fmt.Printf("\njob.Status == finished...")
+				fmt.Printf("\njob.Status == finished...")
 				break
 			}
 
@@ -537,7 +543,7 @@ func main() {
 			// ERROR = telegram: retry after 122 (429)
 			// TODO: Correct sleep time depending on how often we request message editing to conform TG limits
 			//fmt.Printf("\nSleep...")
-			//fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
+			fmt.Printf(" [ WAIT-WHILE-REQ-PROCESSED ] ") // DEBUG
 			time.Sleep(3000 * time.Millisecond)
 		}
 
@@ -545,7 +551,7 @@ func main() {
 		//return c.Send(string(job.Output))
 		//fmt.Printf("\n\nFINISHED")
 
-		//fmt.Printf("\nFinished...")
+		fmt.Printf("\nFinished...")
 		log.Infow("[ MSG ] Message finished", "id", id)
 		//mu.Lock()
 		user.Status = "" // TODO: Enum all statuses and flow between them
