@@ -69,7 +69,8 @@ type Job struct {
 }
 
 type User struct {
-	ID        string `json:"id,omitempty"`      // User ID within external system
+	ID        string `json:"id,omitempty"` // User ID within external system
+	Username  string `json:"username,omitempty"`
 	TGID      int64  `json:"tgid,omitempty"`    // User ID within Telegram
 	Mode      string `json:"mode,omitempty"`    // pro / chat
 	SessionID string `json:"session,omitempty"` // current session
@@ -206,6 +207,7 @@ func main() {
 					//fmt.Printf("\n\nUSER JSON: %s", string(userJSON)) // DEBUG
 					db.WriteString(string(userJSON) + "\n")
 				}
+				db.Sync()
 				db.Close()
 			}
 		}
@@ -295,6 +297,7 @@ func main() {
 			user = &User{
 				ID:        "",
 				TGID:      tgUser.ID,
+				Username:  tgUser.Username,
 				Mode:      "chat",
 				Server:    randomPod("chat"),
 				SessionID: uuid.New().String(),
@@ -372,7 +375,7 @@ func main() {
 		}
 		defer res.Body.Close()
 
-		fmt.Printf("\n[ NET ] Req was sent") // DEBUG
+		fmt.Printf("\n[ NET ] GPU POST Req was sent") // DEBUG
 
 		if res.StatusCode != 200 {
 			fmt.Printf("\n[ ERR ] Wrong status code = %d", res.StatusCode) // DEBUG
@@ -426,7 +429,7 @@ func main() {
 				continue
 			}
 
-			fmt.Printf("\n[ NET ] Req was sent") // DEBUG
+			fmt.Printf("\n[ NET ] GPU GET Req was sent") // DEBUG
 
 			if res.StatusCode != 200 {
 				fmt.Printf("\n[ ERR ] Wrong status code = %d", res.StatusCode) // DEBUG
@@ -493,11 +496,41 @@ func main() {
 				output += string(rune)
 			}
 			output = strings.Trim(output, " ")
-			fmt.Printf("\n\nOUTPUT = %s", output)
+			fmt.Printf("\n\nOUTPUT = %s", output) // DEBUG
+
+			// output = "Hello!" // DEBUG
+			eosFound := false
+			if strings.Contains(output, "<|im_end|>") || strings.Contains(output, "<|eot_id|>") {
+				fmt.Printf("\n[ <|END|> ]") // DEBUG
+				eosFound = true
+
+				pos := strings.Index(output, "<|eot_id|>")
+				fmt.Printf("\n\npos = %v", pos)
+				//utf8 := []rune(output)
+				//fmt.Printf("\n\nutf8 = %v", utf8)
+				output = string(output[:pos])
+				fmt.Printf("\n\noutput = %v", output)
+
+				//output = strings.ReplaceAll(output, "<|im_end|>", "") // FIXME: Nous 8B
+				//output = strings.ReplaceAll(output, "<|eot_id|>", "") // FIXME: Nous 8B
+				//output, eosFound = strings.CutSuffix(output, "<|eot_id|>") // FIXME: Nous 8B
+				//eosFlag = true
+			} /*
+				output, found := strings.CutSuffix(output, "<|im_end|>") // FIXME: Nous 8B
+				if found {
+					break
+				}
+				output, found = strings.CutSuffix(output, "<|eot_id|>") // FIXME: Nous 8B
+				if found {
+					break
+				}*/
+			fmt.Printf("\n\nOUTPUT = %s | %v", output, eosFound) // DEBUG
 
 			// create the message if needed, or edit existing with the new content
 			if msg == nil && output != "" {
+				fmt.Printf("\n\nNEW MSG will send = %s", output) // DEBUG
 				msg, err = bot.Send(tgUser, output)
+				fmt.Printf("\n\nSEND OK for tgUser %+v", tgUser) // DEBUG
 				if err != nil {
 					fmt.Printf("\n[ ERR ] nil message ERROR = %s", err.Error())
 					log.Errorw("[ ERR ] Problem sending message", "id", id, "error", err.Error())
@@ -509,6 +542,9 @@ func main() {
 					}
 					time.Sleep(3000 * time.Millisecond) // wait in case of problems
 					//continue
+					//if foundFlag { // DEBUG
+					//	break
+					//}
 				}
 				//fmt.Printf("\nnil message...")
 			} else if msg != nil {
@@ -517,7 +553,7 @@ func main() {
 				fmt.Printf("\nbot.Edit...")
 				_, err := bot.Edit(msg, output)
 				if err != nil {
-					//fmt.Printf("\nmsg edit ERROR = %s", err.Error())
+					fmt.Printf("\nmsg edit ERROR = %s", err.Error())
 					log.Errorw("[ ERR ] Problem editing message", "id", id, "error", err.Error())
 					//return c.Send("Проблемы со связью, попробуйте еще раз...")
 					errorAttempts++
@@ -531,6 +567,9 @@ func main() {
 				//if msg2 != msg {
 				//	fmt.Printf("\nERROR msg1 != msg2 [ %+v ] [ %+v ]", msg, msg2)
 				//}
+				if eosFound { // DEBUG
+					break
+				}
 			}
 
 			// FIXME: We need MORE conditions to leave the loop
