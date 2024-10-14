@@ -497,25 +497,27 @@ func main() {
 			}
 			output = strings.Trim(output, " ")
 			fmt.Printf("\n\nOUTPUT = %s", output) // DEBUG
+			/*
+				// output = "Hello!" // DEBUG
+				eosFound := false
+				if strings.Contains(output, "<|im_end|>") || strings.Contains(output, "<|eot_id|>") {
+					fmt.Printf("\n[ <|END|> ]") // DEBUG
+					eosFound = true
 
-			// output = "Hello!" // DEBUG
-			eosFound := false
-			if strings.Contains(output, "<|im_end|>") || strings.Contains(output, "<|eot_id|>") {
-				fmt.Printf("\n[ <|END|> ]") // DEBUG
-				eosFound = true
+					pos := strings.Index(output, "<|eot_id|>")
+					fmt.Printf("\n\npos = %v", pos)
+					//utf8 := []rune(output)
+					//fmt.Printf("\n\nutf8 = %v", utf8)
+					output = string(output[:pos])
+					fmt.Printf("\n\noutput = %v", output)
 
-				pos := strings.Index(output, "<|eot_id|>")
-				fmt.Printf("\n\npos = %v", pos)
-				//utf8 := []rune(output)
-				//fmt.Printf("\n\nutf8 = %v", utf8)
-				output = string(output[:pos])
-				fmt.Printf("\n\noutput = %v", output)
-
-				//output = strings.ReplaceAll(output, "<|im_end|>", "") // FIXME: Nous 8B
-				//output = strings.ReplaceAll(output, "<|eot_id|>", "") // FIXME: Nous 8B
-				//output, eosFound = strings.CutSuffix(output, "<|eot_id|>") // FIXME: Nous 8B
-				//eosFlag = true
-			} /*
+					//output = strings.ReplaceAll(output, "<|im_end|>", "") // FIXME: Nous 8B
+					//output = strings.ReplaceAll(output, "<|eot_id|>", "") // FIXME: Nous 8B
+					//output, eosFound = strings.CutSuffix(output, "<|eot_id|>") // FIXME: Nous 8B
+					//eosFlag = true
+				}
+			*/
+			/*
 				output, found := strings.CutSuffix(output, "<|im_end|>") // FIXME: Nous 8B
 				if found {
 					break
@@ -524,7 +526,7 @@ func main() {
 				if found {
 					break
 				}*/
-			fmt.Printf("\n\nOUTPUT = %s | %v", output, eosFound) // DEBUG
+			///// fmt.Printf("\n\nOUTPUT = %s | %v", output, eosFound) // DEBUG
 
 			// create the message if needed, or edit existing with the new content
 			if msg == nil && output != "" {
@@ -567,9 +569,10 @@ func main() {
 				//if msg2 != msg {
 				//	fmt.Printf("\nERROR msg1 != msg2 [ %+v ] [ %+v ]", msg, msg2)
 				//}
-				if eosFound { // DEBUG
-					break
-				}
+				/*
+					if eosFound { // DEBUG
+						break
+					}*/
 			}
 
 			// FIXME: We need MORE conditions to leave the loop
